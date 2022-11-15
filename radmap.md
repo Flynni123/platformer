@@ -1,6 +1,7 @@
 # ROADMAP
 
  - lighting eingine
+   - normal implementation
    - fps improvements
      - fragment shader
      - blitting the results
