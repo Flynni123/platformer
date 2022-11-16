@@ -1,12 +1,30 @@
 import math
+
+import numba
 import numpy as np
 
 
+@numba.jit(nopython=True)
+def getRGB(f):
+    r = math.floor(f / 0x010000)
+    f -= r * 0x010000
+    g = math.floor(f / 0x000100)
+    f -= g * 0x000100
+    b = math.floor(f / 0x000001)
+    f -= b * 0x000001
+    return r, g, b
+
+
+a = getRGB(0x000000)
+del a
+
+
 def smoothStep(edge0, edge1, x):
-    x = np.clip((x - edge0)/(edge1 - edge0), 0.0, 1.0)
-    return x*x*(3 - 2*x)
+    x = np.clip((x - edge0) / (edge1 - edge0), 0.0, 1.0)
+    return x * x * (3 - 2 * x)
 
 
+@numba.jit(nopython=True)
 def distance(pos1, pos2):
     a_ = pos1[0] - pos2[0]
     b_ = pos1[1] - pos2[1]
@@ -14,9 +32,18 @@ def distance(pos1, pos2):
     return abs(pow(pow(a_, 2) + pow(b_, 2), .5))
 
 
+c = distance((0, 0), (1, 1))
+del c
+
+
+@numba.jit(nopython=True)
 def fromPolar(r, roh):
     degRoh = roh * (math.pi / 180)
     return r * math.sin(degRoh), - (r * math.cos(degRoh))
+
+
+d = fromPolar(10, 0)
+del d
 
 
 class Vec2:

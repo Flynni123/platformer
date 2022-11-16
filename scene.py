@@ -1,13 +1,15 @@
-import math
-import light
-import pygame as pg
-import time
-import numpy as np
-import os
-from win32api import GetSystemMetrics
 import json
-import settings
+import math
+import os
+import time
+
+import pygame as pg
+from win32api import GetSystemMetrics
+
+import colors
+import light
 import maths
+import settings
 
 
 class TimerError(Exception):
@@ -17,7 +19,6 @@ class TimerError(Exception):
 class Character:
 
     def __init__(self, image: pg.Surface, rotation=0, lockX=True):
-
         self.image = image
 
         self.pos = maths.Vec2((GetSystemMetrics(0) / 2, 0), rotation)
@@ -78,7 +79,13 @@ class ImageHandler:
 
 
 def renderWithOffset(win: pg.Surface, src: Image, offset: float, y=0):
-    sizex = src.image.get_size()[0]
+    sizex = src.image.get_size()[0]/src.parallaxFac
+
+    if offset < -src.image.get_size()[0]:
+        offset = -src.image.get_size()[0]
+    elif offset > 0:
+        offset = 0
+
     if offset > sizex:
         offset -= sizex
     elif offset < -sizex:
@@ -92,10 +99,10 @@ def renderWithOffset(win: pg.Surface, src: Image, offset: float, y=0):
 # scene
 class SceneLayout:
 
-    def __init__(self, Images: ImageHandler, Lights: light.LightHandler):
-        self.lights = Lights
-
+    def __init__(self, Images: ImageHandler, Lights: light.LightHandler, size=(192, 108)):
         self.images = Images.images
+        self.lights = Lights
+        self.canvasSize = size
 
 
 class Scene:
@@ -104,9 +111,11 @@ class Scene:
         self.character = character
         self.images = layout.images
         self.lightHandler = layout.lights
+        self.canvasSize = layout.canvasSize
 
         self.offset = 0
-        self.surf = pg.Surface(settings.canvasSize, pg.SRCALPHA)
+        self.surf = pg.Surface(self.canvasSize)
+        self.normals = pg.Surface(self.canvasSize)
 
         self.enabled = enabled
 
@@ -124,10 +133,12 @@ class Scene:
             self.offset += -settings.speed * ticks
 
     def render(self, upscaled=True):
-        self.surf.fill((0, 0, 0))
+        self.surf.fill(colors.background)
         for i in self.images:
             renderWithOffset(self.surf, i, self.offset)
 
-        self.surf.blit(self.lightHandler.evaluate(self.surf), (0, 0))
+        if settings.light:
+            self.surf.blit(self.lightHandler.evaluate(self.surf, self.normals), (0, 0))
 
-        return self.surf if not upscaled else pg.transform.scale(self.surf, (math.floor(self.surf.get_size()[0]*settings.scaleFactor), settings.size[1]))
+        return self.surf if not upscaled else pg.transform.scale(self.surf, (
+            math.floor(self.surf.get_size()[0] * settings.scaleFactor), settings.size[1]))

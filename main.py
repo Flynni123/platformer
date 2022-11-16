@@ -1,8 +1,8 @@
 import pygame as pg
+
 import colors
-import scene
 import light
-import settings
+import scene
 
 """
 Instead of rendering the object and passing it to the Display class, i'm passing the object to render to the Display
@@ -45,8 +45,9 @@ class Display:
             "assets/images/bg2.png",
             "assets/images/bg1.png",
             "assets/images/bg0.png"
-        ]), light.LightHandler(self.disp, [
-            light.pointLight((10, 10), light.lightColors.sun, 1, .5)
+        ]), light.LightHandler([
+            light.pointLight((10, 10), light.lightColors.sun, 1, .5, 1),
+            light.globalLight(intensity=.05)
         ])), scene.Character(pg.Surface((0, 0))), True)
 
         self.run = False
@@ -78,6 +79,8 @@ class Display:
             self.disp.blit(self.s.render(), (0, 0))
             pg.display.update()
             self.clock.tick()
+            if not self.run:
+                print(round(self.clock.get_fps(), 1))
 
 
 d = Display()
