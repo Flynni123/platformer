@@ -1,8 +1,14 @@
+import math
+
 import pygame as pg
+import matplotlib.pyplot as pp
+import time as t
 
 import colors
+import physics
 import light
 import scene
+import settings
 
 """
 Instead of rendering the object and passing it to the Display class, i'm passing the object to render to the Display
@@ -36,19 +42,26 @@ class Display:
 
         self.clock = pg.time.Clock()
 
-        if fullscreen:
-            self.disp = pg.display.set_mode(size, pg.FULLSCREEN, pg.SRCALPHA)
-        else:
-            self.disp = pg.display.set_mode(size, pg.SRCALPHA)
+        self.fpsList = []
+        self.timeList = []
 
-        self.s = scene.Scene(scene.SceneLayout(scene.ImageHandler([
-            "assets/images/bg2.png",
-            "assets/images/bg1.png",
-            "assets/images/bg0.png"
-        ]), light.LightHandler([
-            light.pointLight((10, 10), light.lightColors.sun, 1, .5, 1),
-            light.globalLight(intensity=.05)
-        ])), scene.Character(pg.Surface((0, 0))), True)
+        if fullscreen:
+            self.disp = pg.display.set_mode(size, pg.FULLSCREEN)
+        else:
+            self.disp = pg.display.set_mode(size)
+
+        self.s = scene.Scene(scene.SceneLayout([
+            scene.Image("assets/images/bg2.png", 0.4),
+            scene.Image("assets/images/bg1.png", 1),
+            scene.Image("assets/images/bg0.png", 1)
+        ], light.LightHandler([
+            light.pointLight((10, 10), colors.lightColors.cold, 1, .1, 1.2)
+        ]), physics.PhysicsHandler([
+            physics.line((90, 10))
+        ])),
+            scene.Character(
+                scene.Animation("assets/images/character.png", 1)
+            ), True)
 
         self.run = False
         firstRun = True
@@ -56,13 +69,16 @@ class Display:
         self.run = True
         while self.run:
 
+            if settings.debug:
+                self.s.lightHandler.lights[0].x = pg.mouse.get_pos()[0] / settings.scaleFactor
+                self.s.lightHandler.lights[0].y = pg.mouse.get_pos()[1] / settings.scaleFactor
+
             if firstRun:
                 firstRun = False
                 self.timeHandler.start()
+                self.disp.fill(colors.black)
 
-            self.disp.fill(colors.background)
-
-            ticks = self.timeHandler.getTicks()
+            ticks = self.timeHandler.getTicks(self.clock.get_fps())
             self.s.update(ticks, pg.key.get_pressed())
 
             for event in pg.event.get():
@@ -79,8 +95,17 @@ class Display:
             self.disp.blit(self.s.render(), (0, 0))
             pg.display.update()
             self.clock.tick()
+
             if not self.run:
                 print(round(self.clock.get_fps(), 1))
 
+        pg.quit()
+
 
 d = Display()
+
+if settings.debug:
+    pp.plot(d.timeHandler.tickList)
+    pp.plot(d.timeHandler.smoothList)
+    pp.legend(["error", "tickValue", "smoothed", "predicted"])
+    pp.show()

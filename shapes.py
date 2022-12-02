@@ -28,8 +28,8 @@ class Circle:
 
         for y in range(self.radius*2):
             for x in range(self.radius*2):
-                if maths.distance((x, y), self.center) < self.radius:
-                    self.__g1.set_at((x, y), (128 + (x - self.center[0])/2, 128 + (y - self.center[1])/2, 0))
+                if self.__g0.get_at((x, y)) == self.color:
+                    self.__g1.set_at((x, y), (128+(x-self.center[0])/2, 128+(y-self.center[1])/2, 0))
 
     @property
     def g0(self): return self.__g0
@@ -37,6 +37,6 @@ class Circle:
     @property
     def g1(self): return self.__g1
 
-    def render(self, g0: pg.Surface, g1: pg.Surface, dest):
-        g0.blit(self.__g0, (dest[0] - self.center[0], dest[1] - self.center[1]))
-        g1.blit(self.__g1, (dest[0] - self.center[0], dest[1] - self.center[1]))
+    def render(self, gBuffer, dest):
+        gBuffer[0].blit(self.__g0, (dest[0] - self.center[0], dest[1] - self.center[1]))
+        gBuffer[1].blit(self.__g1, (dest[0] - self.center[0], dest[1] - self.center[1]))

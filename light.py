@@ -4,20 +4,15 @@ import numpy as np
 import pygame as pg
 
 import maths
-import shaders
+import light_shaders as shaders
 import shapes
 import settings
-
-
-class lightColors:
-    sun = (255, 224, 129)
-    warm = (242, 229, 215)
-    cold = (212, 229, 255)
+import colors
 
 
 class Light:
 
-    def __init__(self, color=lightColors.warm, intensity=100.0):
+    def __init__(self, color=colors.lightColors.cold, intensity=100.0):
         self.color = color
         self.color0 = (color[0], color[1], color[2], 0)
         self.intensity = intensity
@@ -25,29 +20,95 @@ class Light:
 
 class pointLight(Light):
 
-    def __init__(self, xy, color=lightColors.warm, intensity=1.0, volume=0.3, spread=1.0):
+    def __init__(self, xy, color=colors.lightColors.cold, intensity=1.0, volume=0.3, spread=1.0, parallax=1.0):
         super().__init__(color, intensity)
         self.x, self.y = xy
         self.__volume = volume
+        self.parallax = parallax
         if 1 <= spread:
             self.__spread = spread
         else:
             raise ValueError(f"\'spread\' needs to be > 1")
 
     @property
-    def pos(self): return self.x, self.y
+    def pos(self):
+        return self.x, self.y
 
     @property
-    def volume(self): return self.__volume
+    def volume(self):
+        return self.__volume
 
     @property
-    def spread(self): return self.__spread
+    def spread(self):
+        return self.__spread
 
 
 class globalLight(Light):
 
-    def __init__(self, color=lightColors.warm, intensity=1.0):
-        super().__init__(color, intensity/20)
+    def __init__(self, color=colors.lightColors.cold, intensity=1.0):
+        super().__init__(color, intensity / 20)
+
+
+class GBuffer:
+    def __init__(self, size=settings.unscaledSize, g0=None, g1=None, parallaxFac=1):
+        self.parallaxFac = parallaxFac
+        self.size = size
+
+        if g0 is not None:
+            self.g0 = g0  # pg.Surface(self.size)
+            # self.g0.blit(g0, (0, 0))
+        else:
+            self.g0 = pg.Surface(self.size, pg.SRCALPHA)
+
+        if g1 is not None:
+            self.g1 = g1  # pg.Surface(self.size)
+            # self.g1.blit(g1, (0, 0))
+        else:
+            self.g1 = pg.Surface(self.size, pg.SRCALPHA)
+
+    def reset(self):
+
+        self.g0 = pg.Surface(self.size)
+        self.g1 = pg.Surface(self.size)  # TODO: fix the weird thing where the g1 doesn´t get blit
+
+    def prepareForShader(self):
+
+        self.g0.convert()
+        self.g1.convert()
+
+        return np.array(pg.surfarray.array2d(self.g0), dtype=settings.dtype), \
+               np.array(pg.surfarray.array2d(self.g1), dtype=settings.dtype)
+
+    def blit(self, gBuffer, dest):
+        assert isinstance(gBuffer, GBuffer)
+
+        gBuffer.g0.convert()
+        gBuffer.g1.convert()
+
+        self.g0.blit(gBuffer.g0, dest)
+        self.g1.blit(gBuffer.g1, dest)
+
+    def upscale(self, fac=settings.scaleFactor):
+        pos = (round(self.g0.get_size()[0] * fac), round(self.g0.get_size()[1] * fac))
+        self.g0 = pg.transform.scale(self.g0, pos)
+        self.g1 = pg.transform.scale(self.g1, pos)
+
+    def downscale(self, fac=settings.scaleFactor):
+        pos = (round(self.g0.get_size()[0] / fac), round(self.g0.get_size()[1] / fac))
+        self.g0 = pg.transform.scale(self.g0, pos)
+        self.g1 = pg.transform.scale(self.g1, pos)
+
+    def __copy__(self):
+        g = GBuffer(self.size, self.g0, self.g1)
+        return g
+
+    def __getitem__(self, item):
+        if item == 0:
+            return self.g0
+        elif item == 1:
+            return self.g1
+        else:
+            raise ValueError
 
 
 class LightHandler:
@@ -66,65 +127,39 @@ class LightHandler:
 
         self.composite = pg.Surface(settings.unscaledSize)
         self.globalLights = pg.Surface(settings.unscaledSize)
-        self.g0 = np.zeros((settings.unscaledSize[1], settings.unscaledSize[0]),
-                           dtype=np.float32)  # store Objects without light
-        self.g1 = np.zeros((settings.unscaledSize[1], settings.unscaledSize[0]),
-                           dtype=np.float32)  # store object normals
         self.mask = pg.Surface(settings.unscaledSize)  # store "layers" of shadow
 
         for m in self.masks:
             mTemp = m.to_surface(setcolor=(1, 1, 1), unsetcolor=(0, 0, 0))
-            self.mask.blit(mTemp, (0, 0),
-                           special_flags=pg.BLEND_RGBA_ADD)
+            self.mask.blit(mTemp, (0, 0), special_flags=pg.BLEND_RGBA_ADD)
 
         for l in self.lights:
             if isinstance(l, globalLight):
                 lS = pg.Surface(settings.unscaledSize)
-                lS.fill((round(l.color[0]*l.intensity), round(l.color[1]*l.intensity), round(l.color[2]*l.intensity)))
+                lS.fill(
+                    (round(l.color[0] * l.intensity), round(l.color[1] * l.intensity), round(l.color[2] * l.intensity)))
                 self.globalLights.blit(lS, (0, 0), special_flags=pg.BLEND_RGBA_ADD)
 
-    def evaluate(self, g0: pg.Surface, g1: pg.Surface):
+    def evaluate(self, win: GBuffer):
         self.composite.fill((0, 0, 0, 255))
 
         shaderInLights = []
         for l in self.lights:
             if isinstance(l, pointLight):
+
                 shaderInLights.append(
                     [l.pos[0], l.pos[1], l.intensity, l.volume, l.color[0], l.color[1], l.color[2], l.spread]
                 )
 
         shaderInLights = np.array(shaderInLights, dtype=np.float32)
-        shaderInG0 = np.array(pg.surfarray.array2d(pg.transform.flip(pg.transform.rotate(g0, 90), False, True)),
-                              dtype=np.float32)
-        shaderInG1 = np.array(pg.surfarray.array2d(pg.transform.flip(pg.transform.rotate(g1, 90), False, True)),
-                              dtype=np.float32)
+        shaderInG0, shaderInG1 = win.prepareForShader()
 
         out = self.shaderHandler.fragment(shaderInLights, shaderInG0, shaderInG1)
 
-        for y in range(settings.unscaledSize[1]):
-            for x in range(settings.unscaledSize[0]):
-                r, g, b = maths.getRGB(out[y][x])
-
-                if settings.debug:
-                    try:
-                        self.composite.set_at((x, y), (r, g, b))
-                    except ValueError:
-                        print((r, g, b))
-                        exit()
-                elif settings.adjustColors:
-                    r = 255 if r > 255 else r
-                    g = 255 if g > 255 else g
-                    b = 255 if b > 255 else b
-
-                    r = 0 if r < 0 else r
-                    g = 0 if g < 0 else g
-                    b = 0 if b < 0 else b
-                    self.composite.set_at((x, y), (r, g, b))
-                else:
-                    self.composite.set_at((x, y), (r, g, b))
-
+        pg.pixelcopy.array_to_surface(self.composite, out.round(0).astype(np.uint32))
         self.composite.blit(self.globalLights, (0, 0), special_flags=pg.BLEND_RGB_ADD)
-        return self.composite
+
+        return GBuffer(self.composite.get_size(), self.composite)
 
 
 class test:
@@ -134,9 +169,9 @@ class test:
 
     def __init__(self):
 
-        self.win = pg.display.set_mode((0, 0), pg.FULLSCREEN)
-        self.normals = pg.Surface(self.win.get_size())
-        self.size = self.win.get_rect().size
+        self.disp = pg.display.set_mode((0, 0), pg.FULLSCREEN)
+        self.win = GBuffer(self.disp.get_size())
+        self.size = self.disp.get_rect().size
 
         l = [pointLight((20, 20), (255, 255, 255)), pointLight((172, 88), (200, 0, 200))]
 
@@ -146,13 +181,14 @@ class test:
         self.run = True
         while self.run:
 
-            self.win.fill((0, 0, 0))
-            c.render(self.win, self.normals, pg.mouse.get_pos())
-            cop = self.win.copy()
-            self.win.fill((0, 0, 0))
-            self.win.blit(pg.transform.scale(lh.evaluate(pg.transform.scale(cop, settings.unscaledSize),
-                                                         pg.transform.scale(self.normals, settings.unscaledSize)), (1920, 1080)),
-                          (0, 0))
+            self.win.reset()
+            c.render(self.win, pg.mouse.get_pos())
+            cop = self.win.__copy__()
+            cop.downscale()
+            cop = lh.evaluate(cop)
+            cop.upscale()
+            self.win.reset()
+            self.win.blit(cop, (0, 0))
 
             for event in pg.event.get():
 
@@ -164,6 +200,7 @@ class test:
                     if event.key == pg.K_ESCAPE:
                         self.run = False
 
+            self.disp.blit(self.win.g0, (0, 0))
             pg.display.update()
             self.clock.tick()
             x = self.clock.get_fps()

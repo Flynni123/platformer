@@ -2,6 +2,13 @@ import math
 
 import numba
 import numpy as np
+from typing import *
+
+import settings
+
+
+def avg(list_: Iterable):
+    return sum(list_) / len(list_)
 
 
 @numba.jit(nopython=True)
@@ -19,9 +26,16 @@ a = getRGB(0x000000)
 del a
 
 
+@numba.jit(nopython=True)
 def smoothStep(edge0, edge1, x):
-    x = np.clip((x - edge0) / (edge1 - edge0), 0.0, 1.0)
+    x = (x - edge0) / (edge1 - edge0)
+    x = 0 if x < 0 else x
+    x = 1 if x > 1 else x
     return x * x * (3 - 2 * x)
+
+
+b = smoothStep(0, 1, 1)
+del b
 
 
 @numba.jit(nopython=True)
@@ -116,6 +130,9 @@ class Vec2:
         degRoh = roh * (math.pi / 180)
         self.x = r * math.sin(degRoh)
         self.y = - (r * math.cos(degRoh))
+
+    def asNumpy(self, dtype=settings.dtype):
+        return np.array([self.x, self.y, self.a], dtype=dtype)
 
 
 class Vec3:
