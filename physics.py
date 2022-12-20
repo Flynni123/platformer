@@ -13,27 +13,33 @@ import colors
 
 
 class Node:
-    def __init__(self, pos, fixed=False):
+    def __init__(self, pos, velocity=(0, 0), fixed=False):
         self.pos = pos
+        self.v = velocity
         self.fixed = fixed
 
 
 class Line:
-    def __init__(self, nodes: List[Node], color=(255, 255, 255)):
+    def __init__(self, nodes: List[Node], color=(255, 255, 255), normal=(0, 0), noShadow=True):
         self.nodes = nodes
         self.color = color
+        self.normal = normal
+        self.noShadow = noShadow
 
     def prepareForShader(self):
 
         out = []
         for n in self.nodes:
-            out.append([n.pos[0], n.pos[1], 1 if n.fixed else 0, self.color[0], self.color[1], self.color[2]])
+            out.append([n.pos[0], n.pos[1], 1 if n.fixed else 0,
+                        self.color[0], self.color[1], self.color[2],
+                        self.normal[0]+128, self.normal[1]+128,
+                        n.v[0], n.v[1], 1 if self.noShadow else 0])
 
         out = np.array(out, dtype=settings.dtype)
         return out
 
 
-def line(startPos, color=(255, 255, 255), length=10):
+def line(startPos, color=(255, 255, 255), length=10, normal=(-10, -10)):
     pos = maths.Vec2(startPos)
 
     n = []
@@ -41,21 +47,23 @@ def line(startPos, color=(255, 255, 255), length=10):
         n.append(Node((pos.x, pos.y+10*i)))
     n[0].fixed = True
 
-    return Line(n, color)
+    return Line(n, color, normal)
 
 
 class PBuffer:
-    def __init__(self, size=settings.unscaledSize, p=None):
+    def __init__(self, size=settings.unscaledSize):
         self.size = size
 
-        if p is None: self.p = pg.Surface(self.size, pg.SRCALPHA)
-        else: self.p = p
+        self.time = np.zeros(size)
+
+        self.p = pg.Surface(self.size)
+        self.p.fill((1, 255, 0))
 
     def reset(self):
-        self.p = pg.Surface(self.size)
+        self.p.fill((1, 255, 0))
 
     def prepareForShader(self):
-        return np.array(pg.surfarray.array2d(self.p), dtype=settings.dtype)
+        return np.array([self.time, pg.surfarray.array2d(self.p)], dtype=settings.dtype)
 
     def blit(self, pBuffer, dest):
         assert isinstance(pBuffer, PBuffer)
@@ -96,11 +104,13 @@ class PhysicsHandler:
         self.c = pg.Surface(settings.unscaledSize)
         self.composite = light.GBuffer(self.size)
         self.t = 0
+        self.time = 0
 
         self.shaderHandler = shaders.shaderHandler(self.size)
 
-    def update(self, ticks):
+    def update(self, ticks, pBuffer: PBuffer):
         self.t = ticks
+        pBuffer.time += ticks
 
     def evaluate(self, pBuffer):
 
@@ -114,21 +124,22 @@ class PhysicsHandler:
                 )
 
         shaderInLines = np.array(shaderInLines, dtype=np.float32)
-        shaderInP = pBuffer.prepareForShader()
 
-        out = self.shaderHandler.fragment(shaderInLines, shaderInP)
+        outLines = self.shaderHandler.fragment(shaderInLines)
 
         #self.lines = []
-        for l in out:
-            for e, n in enumerate(l):
-                pos = (n[0], n[1])
-                fixed = bool(round(n[2]))
-                color = n[3:]
+        for l in outLines:
 
-                if not e == 0:
-                    pair = (pos, (l[e-1][0], l[e-1][1]))
-                    pg.draw.line(self.composite.g0, color, pair[0], pair[1])
-                    pg.draw.line(self.composite.g1, (120, 120, 0), pair[0], pair[1])
+            pairs = []
+            for n in l:
+                pairs.append((n[0], n[1]))
+
+            color = l[0][3:6]
+            normal = round(l[0][6]), round(l[0][7])
+            noShadow = l[0][10]
+
+            pg.draw.lines(self.composite.g0, color, False, pairs)
+            pg.draw.lines(self.composite.g1, (normal[0], normal[1], 254*round(noShadow)), False, pairs)
 
         return self.composite
 

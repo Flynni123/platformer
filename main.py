@@ -5,6 +5,7 @@ import matplotlib.pyplot as pp
 import time as t
 
 import colors
+import maths
 import physics
 import light
 import scene
@@ -15,11 +16,6 @@ Instead of rendering the object and passing it to the Display class, i'm passing
 class and then Rendering it. if i want to change it, i just change it.
 - Tzu Sun, art of not knowing what i'm programming
 """
-
-
-class pixelatingMethods:
-    lame = 0
-    fancy = 1
 
 
 class Display:
@@ -51,17 +47,27 @@ class Display:
             self.disp = pg.display.set_mode(size)
 
         self.s = scene.Scene(scene.SceneLayout([
-            scene.Image("assets/images/bg2.png", 0.4),
-            scene.Image("assets/images/bg1.png", 1),
-            scene.Image("assets/images/bg0.png", 1)
+            scene.loadImage("assets/images/bg2.png", 0.4),
+            scene.loadImage("assets/images/bg1.png", 1),
+            scene.loadImage("assets/images/bg0.png", 1)
         ], light.LightHandler([
             light.pointLight((10, 10), colors.lightColors.cold, 1, .1, 1.2)
         ]), physics.PhysicsHandler([
-            physics.line((90, 10))
-        ])),
+            # physics.line((130, 10))
+        ]
+        ), [
+            scene.Foliage(scene.loadImage("assets/images/tree.png"), maths.Vec2((522, 41)))
+        ],
+            scene.loadImage("assets/images/bg1.png", 1)),
             scene.Character(
-                scene.Animation("assets/images/character.png", 1)
-            ), True)
+                scene.AnimationHandler({
+                    "walking": scene.Animation(scene.loadImage("assets/images/character_walking.png"), .2),
+                    "running": scene.Animation(scene.loadImage("assets/images/character_running.png"), .2),
+                    "standing": scene.Animation(scene.loadImage("assets/images/character_standing.png"), .2),
+                    "sitting": scene.Animation(scene.loadImage("assets/images/character_standing.png"), .2)  # TODO: add sitting animation
+                })
+        ))
+        self.s.enable()
 
         self.run = False
         firstRun = True
@@ -103,9 +109,3 @@ class Display:
 
 
 d = Display()
-
-if settings.debug:
-    pp.plot(d.timeHandler.tickList)
-    pp.plot(d.timeHandler.smoothList)
-    pp.legend(["error", "tickValue", "smoothed", "predicted"])
-    pp.show()

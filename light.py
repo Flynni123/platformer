@@ -50,6 +50,11 @@ class globalLight(Light):
 
 
 class GBuffer:
+    """
+    saves color info
+    g0: visible layer
+    g1: normal layer
+    """
     def __init__(self, size=settings.unscaledSize, g0=None, g1=None, parallaxFac=1):
         self.parallaxFac = parallaxFac
         self.size = size
@@ -69,7 +74,7 @@ class GBuffer:
     def reset(self):
 
         self.g0 = pg.Surface(self.size)
-        self.g1 = pg.Surface(self.size)  # TODO: fix the weird thing where the g1 doesn´t get blit
+        self.g1 = pg.Surface(self.size)
 
     def prepareForShader(self):
 
@@ -79,14 +84,16 @@ class GBuffer:
         return np.array(pg.surfarray.array2d(self.g0), dtype=settings.dtype), \
                np.array(pg.surfarray.array2d(self.g1), dtype=settings.dtype)
 
-    def blit(self, gBuffer, dest):
+    def blit(self, gBuffer, dest, ignoreG1=False):
         assert isinstance(gBuffer, GBuffer)
 
         gBuffer.g0.convert()
-        gBuffer.g1.convert()
+        gBuffer.g1.convert_alpha()
 
         self.g0.blit(gBuffer.g0, dest)
-        self.g1.blit(gBuffer.g1, dest)
+        if not ignoreG1:
+            self.g1.blit(gBuffer.g1, dest, special_flags=pg.BLEND_RGBA_MAX)
+            self.g1.convert()
 
     def upscale(self, fac=settings.scaleFactor):
         pos = (round(self.g0.get_size()[0] * fac), round(self.g0.get_size()[1] * fac))
@@ -97,6 +104,9 @@ class GBuffer:
         pos = (round(self.g0.get_size()[0] / fac), round(self.g0.get_size()[1] / fac))
         self.g0 = pg.transform.scale(self.g0, pos)
         self.g1 = pg.transform.scale(self.g1, pos)
+
+    def flip(self):
+        return GBuffer(self.size, pg.transform.flip(self.g0, True, False), pg.transform.flip(self.g1, True, False))
 
     def __copy__(self):
         g = GBuffer(self.size, self.g0, self.g1)
@@ -141,7 +151,6 @@ class LightHandler:
                 self.globalLights.blit(lS, (0, 0), special_flags=pg.BLEND_RGBA_ADD)
 
     def evaluate(self, win: GBuffer):
-        self.composite.fill((0, 0, 0, 255))
 
         shaderInLights = []
         for l in self.lights:
@@ -178,7 +187,7 @@ class test:
         lh = LightHandler(l)
         c = shapes.Circle(200, (255, 255, 255))
 
-        self.run = True
+        self.run = True3
         while self.run:
 
             self.win.reset()

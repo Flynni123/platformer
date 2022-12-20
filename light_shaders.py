@@ -113,29 +113,61 @@ def _fragment(lights, g0, g1, comp):
             scalar = 0 if scalar < 0 else scalar
             scalar = 1 if scalar > 1 else scalar
 
-            fIntensity = l[2] * math.pow((1 - (distance(scalePos(vec), scalePos(lightVec)) / l[7])), 2) * (1 if math.floor(g1r) == 0 and
-                                                                                                                math.floor(g1g) == 0 else scalar)
+            scalar = 1 if g1r + g1g == 0 else scalar
+            scalar = 1 if g1b == 255 else scalar
 
-            addPixel(comp, tx, ty, (l[4] * fIntensity * (g0r / 255),
-                                    l[5] * fIntensity * (g0g / 255),
-                                    l[6] * fIntensity * (g0b / 255)))
+            fIntensity = l[2] * math.pow((1 - (distance(scalePos(vec), scalePos(lightVec)) / l[7])), 2) * scalar
 
-            if g0r + g0g + g0b == 0:
-                addPixel(comp, tx, ty, (l[4] * fIntensity * l[3],
-                                        l[5] * fIntensity * l[3],
-                                        l[6] * fIntensity * l[3]))
+            dx, dy = l[0] - tx, l[1] - ty
+            dst = distance(lightVec, (tx, ty))
+
+            step = (dx / dst, dy / dst)
+
+            x, y = tx, ty
+            running = 0
+
+            if g0[tx, ty] == 0:
+
+                for point in range(round(dst)):
+
+                    if not g0[int(x), int(y)] == 0:
+                        if not getRGB(g1, int(x), int(y))[2] == 254:
+                            running += 1
+
+                    x += step[0]
+                    y += step[1]
+
+            if running == 0:
+                addPixel(comp, tx, ty, (l[4] * fIntensity * (g0r / 255),
+                                        l[5] * fIntensity * (g0g / 255),
+                                        l[6] * fIntensity * (g0b / 255)))
+
+                if g0r + g0g + g0b == 0:
+                    addPixel(comp, tx, ty, (l[4] * fIntensity * l[3],
+                                            l[5] * fIntensity * l[3],
+                                            l[6] * fIntensity * l[3]))
 
     cuda.syncthreads()
 
 
 class shaderHandler:
+    """
+    g1 blue channel:    254: no shadow
+                        255: no normals
+
+    g1 red and green channels: normal vectors
+
+    g0: visible screen
+    """
     def __init__(self, size):
         self.run = False
         self.size = size
+        self.comp = np.zeros(size, dtype=settings.dtype)
 
     def fragment(self, l: np.ndarray, g0: np.ndarray, g1: np.ndarray):
-        comp = np.zeros(self.size)
 
-        _fragment[1024, 512](l, g0, g1, comp)
+        self.comp.fill(0)
+        with cuda.defer_cleanup():
+            _fragment[1024, 512](l, g0, g1, self.comp)
 
-        return comp
+        return self.comp

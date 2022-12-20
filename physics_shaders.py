@@ -91,35 +91,15 @@ def scalePos(pos_):
            pos_[1] / settings.unscaledSize[0]
 
 
-"""
-void line(int x0, int y0, int x1, int y1)
-{
-    int dx =  abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
-    int dy = -abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
-    int err = dx + dy, e2; /* error value e_xy */
-
-    while (1) {
-        setPixel(x0, y0);
-        if (x0 == x1 && y0 == y1) break;
-        e2 = 2 * err;
-        if (e2 > dy) { err += dy; x0 += sx; } /* e_xy+e_x > 0 */
-        if (e2 < dx) { err += dx; y0 += sy; } /* e_xy+e_y < 0 */
-    }
-}
-"""
-
-
 @cuda.jit(fastmath=True)
-def _fragment(lines, pBuffer):
+def _fragment(lines):
     ty = cuda.threadIdx.x
     tx = cuda.blockIdx.x
     bw = cuda.blockDim.x
     pos = tx + ty * bw
 
-    if -1 < tx < pBuffer.shape[0] and -1 < ty < pBuffer.shape[1]:
-
-        c = getRGB(pBuffer, tx, ty)
-        velocity = (128 - c[0], 128 - c[1])
+    if pos <= len(lines):
+        pass
 
     cuda.syncthreads()
 
@@ -130,8 +110,9 @@ class shaderHandler:
         self.size = size
 
     @staticmethod
-    def fragment(lines: np.ndarray, pBuffer):
+    def fragment(lines: np.ndarray):
 
-        _fragment[1024, 512](lines, pBuffer)
+        with cuda.defer_cleanup():
+            _fragment[1024, 512](lines)
 
         return lines
