@@ -1,3 +1,3 @@
 # platformer
- a game I'm (not) working on
+ a game I'm sometimes working on
  
