@@ -1,8 +1,4 @@
-import math
-
 import pygame as pg
-import matplotlib.pyplot as pp
-import time as t
 
 import colors
 import maths
@@ -12,9 +8,9 @@ import scene
 import settings
 
 """
-Instead of rendering the object and passing it to the Display class, i'm passing the object to render to the Display
-class and then Rendering it. if i want to change it, i just change it.
-- Tzu Sun, art of not knowing what i'm programming
+Instead of rendering everything as efficiently as possible it feel's like I'm rendering everything twice.
+Oh, and memory management is a hell.
+- Tzu Sun, art of not knowing what i'm coding
 """
 
 
@@ -42,32 +38,45 @@ class Display:
         self.timeList = []
 
         if fullscreen:
-            self.disp = pg.display.set_mode(size, pg.FULLSCREEN)
+            self.display = pg.display.set_mode(size, pg.FULLSCREEN)
         else:
-            self.disp = pg.display.set_mode(size)
+            self.display = pg.display.set_mode(size)
 
-        self.s = scene.Scene(scene.SceneLayout([
-            scene.loadImage("assets/images/bg2.png", 0.4),
-            scene.loadImage("assets/images/bg1.png", 1),
-            scene.loadImage("assets/images/bg0.png", 1)
-        ], light.LightHandler([
-            light.pointLight((10, 10), colors.lightColors.cold, 1, .1, 1.2)
-        ]), physics.PhysicsHandler([
-            # physics.line((130, 10))
+        self.scenes = [
+            # MAIN SCREEN SCENE
+            scene.MainScreenScene(scene.MainScreenSceneLayout(scene.loadImage("assets/images/MainScreen/bg.png"))),
+
+            # FIRST SCENE
+            scene.Scene(scene.SceneLayout([
+                scene.loadImage("assets/images/bg2.png", 0.4),
+                scene.loadImage("assets/images/bg1.png", 1),
+                scene.loadImage("assets/images/bg0.png", 1)
+            ], light.LightHandler([
+                light.pointLight((10, 10), colors.lightColors.cold, 1, .1, 1.2)
+            ]), physics.PhysicsHandler([
+                physics.line((130, 10))
+            ]
+            ), [
+                scene.Foliage(scene.loadImage("assets/images/tree.png"), maths.Vec2((522, 41)))
+            ],
+                scene.loadImage("assets/images/bg1.png", 1)),
+                scene.Character(
+                    scene.AnimationHandler({
+                        "walking": scene.Animation(scene.loadImage("assets/images/character_walking.png"), .2),
+                        "running": scene.Animation(scene.loadImage("assets/images/character_running.png"), .2),
+                        "standing": scene.Animation(scene.loadImage("assets/images/character_standing.png"), .2),
+                        "sitting": scene.Animation(scene.loadImage("assets/images/character_standing.png"), .2)
+                    })
+                ))
         ]
-        ), [
-            scene.Foliage(scene.loadImage("assets/images/tree.png"), maths.Vec2((522, 41)))
-        ],
-            scene.loadImage("assets/images/bg1.png", 1)),
-            scene.Character(
-                scene.AnimationHandler({
-                    "walking": scene.Animation(scene.loadImage("assets/images/character_walking.png"), .2),
-                    "running": scene.Animation(scene.loadImage("assets/images/character_running.png"), .2),
-                    "standing": scene.Animation(scene.loadImage("assets/images/character_standing.png"), .2),
-                    "sitting": scene.Animation(scene.loadImage("assets/images/character_standing.png"), .2)  # TODO: add sitting animation
-                })
-        ))
-        self.s.enable()
+        self.counter = 0
+        self.current = self.scenes[self.counter]
+
+        for e, s in enumerate(self.scenes):
+            if e == 0:
+                s.enable()
+            else:
+                s.disable()
 
         self.run = False
         firstRun = True
@@ -75,17 +84,19 @@ class Display:
         self.run = True
         while self.run:
 
-            if settings.debug:
-                self.s.lightHandler.lights[0].x = pg.mouse.get_pos()[0] / settings.scaleFactor
-                self.s.lightHandler.lights[0].y = pg.mouse.get_pos()[1] / settings.scaleFactor
-
             if firstRun:
                 firstRun = False
                 self.timeHandler.start()
-                self.disp.fill(colors.black)
+                self.display.fill(colors.black)
 
-            ticks = self.timeHandler.getTicks(self.clock.get_fps())
-            self.s.update(ticks, pg.key.get_pressed())
+            ticks = self.timeHandler.getTicks()
+            for s in self.scenes:
+                s.update(ticks, pg.key.get_pressed())
+
+            if not self.current.enabled:
+                self.counter += 1
+                self.current = self.scenes[self.counter]
+                self.current.enable()
 
             for event in pg.event.get():
 
@@ -98,13 +109,11 @@ class Display:
                     if event.key == pg.K_ESCAPE:
                         self.run = False
 
-            self.disp.blit(self.s.render(), (0, 0))
+            self.display.blit(self.current.render(), (0, 0))
             pg.display.update()
             self.clock.tick()
 
-            if not self.run:
-                print(round(self.clock.get_fps(), 1))
-
+        print(round(self.clock.get_fps(), 1))
         pg.quit()
 
 

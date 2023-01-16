@@ -1,4 +1,3 @@
-import json
 import math
 import os
 import time
@@ -6,14 +5,13 @@ from typing import *
 
 import pygame as pg
 from win32api import GetSystemMetrics
-import numpy as np
 
 import colors
+import keyboardSettings
 import light
 import maths
 import physics
 import settings
-import keyboardSettings
 
 
 class TimerError(Exception):
@@ -35,35 +33,29 @@ class TimeHandler:
 
         self.s = 1
         self._start = 0
-        self.error = 0
         self.tickList = []
-        self.smoothList = []
 
     def start(self):
         self._start = time.time()
 
-    def getTicks(self, fps):
+    def getTicks(self):
         if self._start > 0:
             out = (time.time() - self._start) * self.s
             self._start = time.time()
             self.tickList.append(out)
 
             smooth = maths.avg(self.tickList[-20:])
-            if settings.debug: self.smoothList.append(smooth)
-
-            self.error += out - smooth
-            if self.error >= 1:
-                smooth /= 10
+            self.tickList = self.tickList[-20:]
 
             return smooth
         else:
-            raise TimerError("didnt start()")
+            raise TimerError("did\'nt start()")
 
-    def setSpeed(self, num: float):
-        """
-        :param num: speed of the game engine. 1 equals one second per second
-        """
-        self.s = num
+    @property
+    def speed(self): return self.s
+
+    @speed.setter
+    def speed(self, s): self.s = s
 
 
 # images
@@ -78,11 +70,11 @@ def loadImage(path, parallaxFac=1.0):
     p = os.path.abspath(path)
 
     image = pg.image.load(p).convert()
-
-    if os.path.exists(f"assets/images/{os.path.split(p)[-1].split('.')[0]}g1.png"):
-        normal = pg.image.load(f"assets/images/{os.path.split(p)[-1].split('.')[0]}g1.png")
+    g1 = f"{os.path.split(p)[0]}\\{os.path.split(p)[1].split('.')[0]}g1.png"
+    if os.path.exists(g1):
+        normal = pg.image.load(g1)
         normal.convert()
-        if settings.debug: print(f"loaded normal map {os.path.split(p)[-1].split('.')[0]}g1.png")
+        if settings.debug: print(f"loaded normal map {g1}")
     else:
         normal = pg.Surface(image.get_size(), pg.SRCALPHA)
 
@@ -182,15 +174,16 @@ class Character:
 
     def __init__(self, animations: AnimationHandler, rotation=0):
         self.animations = animations
-        size = self.animations.standing.getImage().gBuffer.g0.get_size()
+        self.size = self.animations.standing.getImage().gBuffer.g0.get_size()
 
-        self.pos = [(GetSystemMetrics(0) / 2 / settings.scaleFactor) - (size[0] / 2),
-                    (GetSystemMetrics(1) / 2 / settings.scaleFactor) - (size[0] / 2)]
+        self.pos = [(GetSystemMetrics(0) / 2 / settings.scaleFactor) - (self.size[0] / 2),
+                    (GetSystemMetrics(1) / 2 / settings.scaleFactor) - (self.size[0] / 2)]
         self.velocity = maths.Vec2((0, 0))
         self.rotation = rotation
         self.floor = None
 
         self.jumping = False
+        self.inAir = True
 
         self.flipped = False
         self.current = self.animations.standing
@@ -203,18 +196,18 @@ class Character:
 
         if settings.physics:
             self.floor = floor
-            mask = pg.mask.from_surface(self.current.getImage().gBuffer.g0)
 
             oldY = self.pos[1]
             y = 0
 
-            while self.floor.overlap_area(mask, (round(self.pos[0] - offset), round(y))) == 0:
+            while self.floor.get_at((round(self.pos[0] - offset + self.size[0]/2), round(y + self.size[0]))) == 0:
                 y += 1
 
                 if y > settings.unscaledSize[1]:
-                    raise FallingError(f"y: {y} > maxY: {settings.unscaledSize[1]}")
+                    #raise FallingError(f"y: {y} > maxY: {settings.unscaledSize[1]}")
+                    y = 0
+                    break
 
-            y -= 1
             floorY = y
             y = oldY - (self.velocity.y * ticks * settings.gravity)
             self.velocity.y -= settings.gravity * ticks
@@ -225,7 +218,12 @@ class Character:
                 self.pos[1] = floorY
                 self.velocity.y = 0
 
-        if keys[pg.K_a] == 1 or keys[pg.K_LEFT] == 1:
+            if not y == floorY:
+                self.inAir = True
+            else:
+                self.inAir = False
+
+        if keys[keyboardSettings.left] == 1:
             self.movementStart += ticks
 
             if keys[keyboardSettings.run] == 1:
@@ -235,7 +233,7 @@ class Character:
                 self.velocity.x = -(settings.speed * ticks * 100)
                 self.current = self.animations.walking
 
-        elif keys[pg.K_d] == 1 or keys[pg.K_RIGHT] == 1:
+        elif keys[keyboardSettings.right] == 1:
             self.movementStart += ticks
 
             if keys[keyboardSettings.run] == 1:
@@ -251,7 +249,7 @@ class Character:
             self.movementStart = 0
 
         if keys[keyboardSettings.jump] == 1:
-            if not self.jumping:
+            if not self.jumping and not self.inAir:
                 self.jumping = True
                 self.velocity.y += settings.jumpHeight / settings.gravity
         else:
@@ -276,12 +274,8 @@ class Character:
                 win.blit(gb, self.pos)
 
     def prepareForPBuffer(self, pBuffer: physics.PBuffer):
-        mask = np.array(pg.surfarray.array2d(self.current.getImage().gBuffer.g0), dtype=settings.dtype)
-        mask /= 256 ** 3
-        mask = np.ceil(mask)
-        r = 0x010000 * (128 + self.velocity.x)
-        g = 0x000100 * (128 + self.velocity.y)
-        mask *= r + g
+        mask = pg.mask.from_surface(self.current.getImage().gBuffer.g0, 1)
+        pBuffer.blit(physics.PBuffer(p=mask.to_surface(setcolor=(128+self.velocity.x, 128+self.velocity.y, 0), unsetcolor=(128, 128, 0))), self.pos)
 
 
 class Foliage:
@@ -354,50 +348,59 @@ class Scene:
         self.imageSize = self.images[0].image.get_size()
 
         self.offset = 0
-        self.win = light.GBuffer(self.canvasSize)
+        self.win: light.GBuffer = light.GBuffer(self.canvasSize)
         self.pBuffer = physics.PBuffer(self.canvasSize)
+        self.font = pg.font.SysFont("Arial", 14)
+        self.tick = 0
 
-        self.enabled = enabled
+        self.__enabled = enabled
 
     def disable(self):
-        self.enabled = False
+        self.__enabled = False
 
     def enable(self):
-        self.enabled = True
+        self.__enabled = True
+
+    @property
+    def enabled(self): return self.__enabled
 
     def update(self, ticks, keys):
-        if self.enabled:
+        if self.__enabled:
+
+            self.tick = ticks
+
             if settings.character: self.character.update(ticks, keys, self.floor, self.offset)
             if settings.physics: self.physicsHandler.update(ticks, self.pBuffer)
 
-            if keys[pg.K_a] == 1 or keys[pg.K_LEFT] == 1:
-
+            if keys[keyboardSettings.left] == 1:
                 if keys[keyboardSettings.run] == 1:
                     self.offset += settings.speed * settings.runFac * ticks * 100
                 else:
                     self.offset += settings.speed * ticks * 100
 
-            elif keys[pg.K_d] == 1 or keys[pg.K_RIGHT] == 1:
-
+            elif keys[keyboardSettings.right] == 1:
                 if keys[keyboardSettings.run] == 1:
                     self.offset -= settings.speed * settings.runFac * ticks * 100
                 else:
                     self.offset -= settings.speed * ticks * 100
 
     def render(self):
-        if self.enabled:
+        if self.__enabled:
             self.win.reset()
 
             for i in self.images:
                 self.offset = renderWithOffset(self.win, i, self.offset, self.imageSize)
 
+            if settings.foliage:
+                fgBuffer = light.GBuffer()
+                for f in self.foliage:
+                    fgBuffer.reset()
+                    fgBuffer.blit(f.render(), f.pos.pos)
+                    self.offset = renderWithOffset(self.win, fgBuffer, self.offset, self.imageSize)  # TODO: foliage prevents offset from changing - fix
+
             if settings.physics:
                 self.offset = renderWithOffset(self.win, self.physicsHandler.evaluate(self.pBuffer), self.offset,
                                                self.imageSize)
-
-            if settings.foliage:
-                for f in self.foliage:
-                    self.offset = renderWithOffset(self.win, f.render(), self.offset, f.size)  # TODO: tree prevents offset from changing - fix
 
             if settings.character:
                 self.character.render(self.win)
@@ -408,9 +411,75 @@ class Scene:
             if settings.character and not settings.characterAffectedByLight:
                 self.character.render(self.win)
 
-            print(self.offset)
-
-            return pg.transform.scale(self.win.g0, (math.floor(self.win.g0.get_size()[0] * settings.scaleFactor),
+            out = pg.transform.scale(self.win.g0, (math.floor(self.win.g0.get_size()[0] * settings.scaleFactor),
                                                     settings.size[1]))
+
+            if settings.showFps:
+                if self.tick > 0:
+                    out.blit(self.font.render(f"{int(1 / self.tick)}", False, (255, 255, 255)), (0, 0))
+
+            return out
+        else:
+            return pg.Surface((0, 0))
+
+
+class MainScreenSceneLayout:
+
+    def __init__(self, bgImage):
+        self.image = bgImage
+        self.lights = light.LightHandler([light.pointLight(settings.center, colors.lightColors.cold, 1, 0)])
+
+        self.canvasSize = settings.unscaledSize
+
+
+class MainScreenScene:
+
+    def __init__(self, layout: MainScreenSceneLayout, enabled=True):
+        self.image = layout.image
+
+        self.lightHandler: light.LightHandler = layout.lights
+        self.canvasSize = layout.canvasSize
+        self.imageSize = self.image.image.get_size()
+
+        self.win: light.GBuffer = light.GBuffer(settings.unscaledSize)
+        self.font = pg.font.SysFont("Arial", 14)
+        self.tick = 0
+
+        self.__enabled = enabled
+
+    def disable(self):
+        self.__enabled = False
+
+    def enable(self):
+        self.__enabled = True
+
+    @property
+    def enabled(self): return self.__enabled
+
+    def update(self, ticks, keys):
+        if self.__enabled:
+
+            self.lightHandler.lightsToList()
+
+            self.tick = ticks
+            self.lightHandler.lights[0].x = round(pg.mouse.get_pos()[0] / settings.scaleFactor)
+            self.lightHandler.lights[0].y = round(pg.mouse.get_pos()[1] / settings.scaleFactor)
+
+    def render(self):
+        if self.__enabled:
+            self.win.reset()
+
+            self.win.blit(self.image.gBuffer, (0, 0))
+            if settings.light:
+                self.win.blit(self.lightHandler.evaluate(self.win), (0, 0))
+
+            out = pg.transform.scale(self.win.g0, (math.floor(self.win.g0.get_size()[0] * settings.scaleFactor),
+                                                    settings.size[1]))
+
+            if settings.showFps:
+                if self.tick > 0:
+                    out.blit(self.font.render(f"{int(1 / self.tick)}", False, (255, 255, 255)), (0, 0))
+
+            return out
         else:
             return pg.Surface((0, 0))

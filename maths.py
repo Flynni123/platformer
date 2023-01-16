@@ -2,13 +2,22 @@ import math
 
 import numba
 import numpy as np
-from typing import *
+from numba import vectorize
 
 import settings
 
 
-def avg(list_: Iterable):
-    return sum(list_) / len(list_)
+def avg(list_):
+    return math.fsum(list_) / len(list_)
+
+
+@vectorize(['float32(float32, float32)',
+            'float64(float64, float64)',
+            'int32(int32, int32)',
+            'int64(int64, int64)'],
+            target='cuda')
+def sum_reduce(a, b):
+    return a + b
 
 
 @numba.jit(nopython=True)
@@ -22,8 +31,13 @@ def getRGB(f):
     return r, g, b
 
 
-a = getRGB(0x000000)
-del a
+@numba.jit(nopython=True)
+def RGBAsHex(rgb):
+    r, g, b = rgb
+    r = math.floor(r)
+    g = math.floor(g)
+    b = math.floor(b)
+    return (0x010000 * r) + (0x000100 * g) + (0x000001 * b)
 
 
 @numba.jit(nopython=True)
@@ -34,10 +48,6 @@ def smoothStep(edge0, edge1, x):
     return x * x * (3 - 2 * x)
 
 
-b = smoothStep(0, 1, 1)
-del b
-
-
 @numba.jit(nopython=True)
 def distance(pos1, pos2):
     a_ = pos1[0] - pos2[0]
@@ -46,18 +56,10 @@ def distance(pos1, pos2):
     return abs(pow(pow(a_, 2) + pow(b_, 2), .5))
 
 
-c = distance((0, 0), (1, 1))
-del c
-
-
 @numba.jit(nopython=True)
 def fromPolar(r, roh):
     degRoh = roh * (math.pi / 180)
     return r * math.sin(degRoh), - (r * math.cos(degRoh))
-
-
-d = fromPolar(10, 0)
-del d
 
 
 class Vec2:

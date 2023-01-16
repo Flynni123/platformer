@@ -1,7 +1,6 @@
 import math
 
 import numpy as np
-import pygame as pg
 from numba import cuda
 
 import settings
@@ -79,7 +78,6 @@ def normalize(xy):
 
 @cuda.jit(device=True, fastmath=True)
 def dot(pos1, pos2):
-
     pos1normal = normalize(pos1)
     pos2normal = normalize(pos2)
 
@@ -92,12 +90,23 @@ def scalePos(pos_):
            pos_[1] / settings.unscaledSize[0]
 
 
+@cuda.jit(device=True, fastmath=True)
+def clamp(top, bottom, x):
+    out = x if x <= top else top
+    out = out if out >= bottom else bottom
+    return out
+
+
 @cuda.jit(fastmath=True)
 def _fragment(lights, g0, g1, comp):
-    ty = cuda.threadIdx.x
-    tx = cuda.blockIdx.x
+    ty: int = cuda.threadIdx.x
+    tx: int = cuda.blockIdx.x
+
+    stepFactor = settings.raytracingSteps
 
     if -1 < tx < g0.shape[0] and -1 < ty < g0.shape[1]:
+
+        setPixel(comp, tx, ty, (0, 0, 0))
 
         for l in lights:
 
@@ -105,32 +114,30 @@ def _fragment(lights, g0, g1, comp):
             g1r, g1g, g1b = getRGB(g1, tx, ty)
 
             normalVec = (g1r - 128, g1g - 128)
-            lightDir = (l[0]-tx, l[1]-ty)
+            lightDir = (l[0] - tx, l[1] - ty)
             lightVec = (l[0], l[1])
             vec = (tx, ty)
 
-            scalar = dot(lightDir, normalVec)
-            scalar = 0 if scalar < 0 else scalar
-            scalar = 1 if scalar > 1 else scalar
+            scalar = clamp(1, 0, dot(lightDir, normalVec))
 
             scalar = 1 if g1r + g1g == 0 else scalar
             scalar = 1 if g1b == 255 else scalar
 
             fIntensity = l[2] * math.pow((1 - (distance(scalePos(vec), scalePos(lightVec)) / l[7])), 2) * scalar
 
-            dx, dy = l[0] - tx, l[1] - ty
-            dst = distance(lightVec, (tx, ty))
+            dx, dy = lightDir
+            dst = distance(lightVec, vec)
 
-            step = (dx / dst, dy / dst)
+            step = (dx / dst / stepFactor, dy / dst / stepFactor)
 
             x, y = tx, ty
             running = 0
 
             if g0[tx, ty] == 0:
 
-                for point in range(round(dst)):
+                for point in range(round(dst * stepFactor)):
 
-                    if not g0[int(x), int(y)] == 0:
+                    if not g0[round(x), round(y)] == 0:
                         if not getRGB(g1, int(x), int(y))[2] == 254:
                             running += 1
 
@@ -155,18 +162,17 @@ class shaderHandler:
     g1 blue channel:    254: no shadow
                         255: no normals
 
-    g1 red and green channels: normal vectors
+    g1 red and green channels: normal vectors (x+128, y+128)
 
     g0: visible screen
     """
+
     def __init__(self, size):
         self.run = False
         self.size = size
         self.comp = np.zeros(size, dtype=settings.dtype)
 
     def fragment(self, l: np.ndarray, g0: np.ndarray, g1: np.ndarray):
-
-        self.comp.fill(0)
         with cuda.defer_cleanup():
             _fragment[1024, 512](l, g0, g1, self.comp)
 

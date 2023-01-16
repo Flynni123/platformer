@@ -1,7 +1,6 @@
 import math
 
 import numpy as np
-import pygame as pg
 from numba import cuda
 
 import settings
@@ -92,14 +91,14 @@ def scalePos(pos_):
 
 
 @cuda.jit(fastmath=True)
-def _fragment(lines):
-    ty = cuda.threadIdx.x
-    tx = cuda.blockIdx.x
-    bw = cuda.blockDim.x
+def _fragment(lines, t):
+    ty: int = cuda.threadIdx.x
+    tx: int = cuda.blockIdx.x
+    bw: int = cuda.blockDim.x
     pos = tx + ty * bw
 
     if pos <= len(lines):
-        pass
+        time = t[0]
 
     cuda.syncthreads()
 
@@ -110,9 +109,9 @@ class shaderHandler:
         self.size = size
 
     @staticmethod
-    def fragment(lines: np.ndarray):
+    def fragment(lines: np.ndarray, t: float):
 
         with cuda.defer_cleanup():
-            _fragment[1024, 512](lines)
+            _fragment[1024, 512](lines, np.array([t], dtype=settings.dtype))
 
         return lines
