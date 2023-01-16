@@ -78,6 +78,8 @@ class Display:
             else:
                 s.disable()
 
+        pg.mouse.set_visible(False)
+
         self.run = False
         firstRun = True
 
@@ -114,6 +116,7 @@ class Display:
             self.clock.tick()
 
         print(round(self.clock.get_fps(), 1))
+        pg.mouse.set_visible(True)
         pg.quit()
 
 

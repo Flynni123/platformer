@@ -444,6 +444,11 @@ class MainScreenScene:
         self.win: light.GBuffer = light.GBuffer(settings.unscaledSize)
         self.font = pg.font.SysFont("Arial", 14)
         self.tick = 0
+        self.pressed = False
+
+        self.startButtonRect = pg.Rect((round(settings.center[0]/2)-20, round(settings.center[1]/2)-10), (40, 20))
+        self.startButtonFont = pg.font.SysFont("Arial", 18)
+        self.startButtonText = self.startButtonFont.render("Start", False, (0, 0, 0))
 
         self.__enabled = enabled
 
@@ -461,15 +466,33 @@ class MainScreenScene:
 
             self.lightHandler.lightsToList()
 
+            mx = round(pg.mouse.get_pos()[0] / settings.scaleFactor)
+            my = round(pg.mouse.get_pos()[1] / settings.scaleFactor)
+
             self.tick = ticks
-            self.lightHandler.lights[0].x = round(pg.mouse.get_pos()[0] / settings.scaleFactor)
-            self.lightHandler.lights[0].y = round(pg.mouse.get_pos()[1] / settings.scaleFactor)
+            self.lightHandler.lights[0].x = mx
+            self.lightHandler.lights[0].y = my
+
+            collide = self.startButtonRect.collidepoint(mx, my)
+
+            if collide:
+
+                if pg.mouse.get_pressed(3)[0]:
+                    self.lightHandler.lights[0].color = (255, 114, 128)  # RED: switch scenes
+                    self.disable()
+
+                self.lightHandler.lights[0].color = (176, 184, 220)  # BLUE: hovering
+            else:
+                self.lightHandler.lights[0].color = colors.lightColors.cold  # reset color
 
     def render(self):
         if self.__enabled:
             self.win.reset()
 
             self.win.blit(self.image.gBuffer, (0, 0))
+            pg.draw.rect(self.win.g0, (255, 255, 255), self.startButtonRect)
+            self.win.g0.blit(self.startButtonText, (self.startButtonRect.topleft[0]+1, self.startButtonRect.topleft[1]))
+
             if settings.light:
                 self.win.blit(self.lightHandler.evaluate(self.win), (0, 0))
 
