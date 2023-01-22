@@ -27,3 +27,5 @@ foliage = False
 light = True
 globalLights = True
 raytracingSteps = 3
+
+camera = True
