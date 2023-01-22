@@ -1,5 +1,7 @@
 import pygame as pg
+pg.init()
 
+import camera
 import colors
 import maths
 import physics
@@ -42,9 +44,10 @@ class Display:
         else:
             self.display = pg.display.set_mode(size)
 
+        cam = camera.Camera()
         self.scenes = [
             # MAIN SCREEN SCENE
-            scene.MainScreenScene(scene.MainScreenSceneLayout(scene.loadImage("assets/images/MainScreen/bg.png"))),
+            scene.MainScreenScene(scene.MainScreenSceneLayout(scene.loadImage("assets/images/MainScreen/bg.png"), cam)),
 
             # FIRST SCENE
             scene.Scene(scene.SceneLayout([
@@ -56,7 +59,8 @@ class Display:
             ]), physics.PhysicsHandler([
                 physics.line((130, 10))
             ]
-            ), [
+            ), cam,
+                [
                 scene.Foliage(scene.loadImage("assets/images/tree.png"), maths.Vec2((522, 41)))
             ],
                 scene.loadImage("assets/images/bg1.png", 1)),
@@ -92,13 +96,14 @@ class Display:
                 self.display.fill(colors.black)
 
             ticks = self.timeHandler.getTicks()
-            for s in self.scenes:
-                s.update(ticks, pg.key.get_pressed())
+            self.current.update(ticks, pg.key.get_pressed())
 
             if not self.current.enabled:
                 self.counter += 1
                 self.current = self.scenes[self.counter]
                 self.current.enable()
+                self.current.update(ticks, pg.key.get_pressed())
+                self.current.update(ticks, pg.key.get_pressed())
 
             for event in pg.event.get():
 

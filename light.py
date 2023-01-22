@@ -75,6 +75,9 @@ class GBuffer:
         else:
             self.g1 = pg.Surface(self.size, pg.SRCALPHA)
 
+        self.g0shader = None
+        self.g1shader = None
+
     def reset(self):
 
         self.g0 = pg.Surface(self.size)
@@ -85,8 +88,10 @@ class GBuffer:
         self.g0.convert()
         self.g1.convert()
 
-        return np.array(pg.surfarray.array2d(self.g0), dtype=settings.dtype), \
-            np.array(pg.surfarray.array2d(self.g1), dtype=settings.dtype)
+        self.g0shader = np.array(pg.surfarray.array2d(self.g0), dtype=settings.dtype)
+        self.g1shader = np.array(pg.surfarray.array2d(self.g1), dtype=settings.dtype)
+
+        return self.g0shader, self.g1shader
 
     def arrayToGBuffer(self, g0=None, g1=None):
         if g0 is not None:

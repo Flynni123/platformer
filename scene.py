@@ -7,6 +7,7 @@ import pygame as pg
 from win32api import GetSystemMetrics
 
 import colors
+import camera
 import keyboardSettings
 import light
 import maths
@@ -52,10 +53,12 @@ class TimeHandler:
             raise TimerError("did\'nt start()")
 
     @property
-    def speed(self): return self.s
+    def speed(self):
+        return self.s
 
     @speed.setter
-    def speed(self, s): self.s = s
+    def speed(self, s):
+        self.s = s
 
 
 # images
@@ -200,11 +203,11 @@ class Character:
             oldY = self.pos[1]
             y = 0
 
-            while self.floor.get_at((round(self.pos[0] - offset + self.size[0]/2), round(y + self.size[0]))) == 0:
+            while self.floor.get_at((round(self.pos[0] - offset + self.size[0] / 2), round(y + self.size[0]))) == 0:
                 y += 1
 
                 if y > settings.unscaledSize[1]:
-                    #raise FallingError(f"y: {y} > maxY: {settings.unscaledSize[1]}")
+                    # raise FallingError(f"y: {y} > maxY: {settings.unscaledSize[1]}")
                     y = 0
                     break
 
@@ -275,7 +278,9 @@ class Character:
 
     def prepareForPBuffer(self, pBuffer: physics.PBuffer):
         mask = pg.mask.from_surface(self.current.getImage().gBuffer.g0, 1)
-        pBuffer.blit(physics.PBuffer(p=mask.to_surface(setcolor=(128+self.velocity.x, 128+self.velocity.y, 0), unsetcolor=(128, 128, 0))), self.pos)
+        pBuffer.blit(physics.PBuffer(
+            p=mask.to_surface(setcolor=(128 + self.velocity.x, 128 + self.velocity.y, 0), unsetcolor=(128, 128, 0))),
+                     self.pos)
 
 
 class Foliage:
@@ -324,10 +329,12 @@ def renderWithOffset(win: light.GBuffer, src: Union[Image, light.GBuffer], offse
 # scene
 class SceneLayout:
 
-    def __init__(self, Images, Lights: light.LightHandler, Physics: physics.PhysicsHandler, foliage: list, floor: Image):
+    def __init__(self, Images, Lights: light.LightHandler, Physics: physics.PhysicsHandler, cam: camera.Camera, foliage: list,
+                 floor: Image):
         self.images = Images
         self.lights = Lights
         self.physic = Physics
+        self.cam = cam
         self.foliage = foliage
         self.floor = pg.mask.from_surface(floor.gBuffer.g0, 1)
 
@@ -339,6 +346,7 @@ class Scene:
     def __init__(self, layout: SceneLayout, character: Character, enabled=False):
         self.character: Character = character
         self.images: list = layout.images
+        self.cam = layout.cam
         self.physicsHandler: physics.PhysicsHandler = layout.physic
         self.floor = layout.floor
         self.foliage = layout.foliage
@@ -362,7 +370,8 @@ class Scene:
         self.__enabled = True
 
     @property
-    def enabled(self): return self.__enabled
+    def enabled(self):
+        return self.__enabled
 
     def update(self, ticks, keys):
         if self.__enabled:
@@ -396,7 +405,8 @@ class Scene:
                 for f in self.foliage:
                     fgBuffer.reset()
                     fgBuffer.blit(f.render(), f.pos.pos)
-                    self.offset = renderWithOffset(self.win, fgBuffer, self.offset, self.imageSize)  # TODO: foliage prevents offset from changing - fix
+                    self.offset = renderWithOffset(self.win, fgBuffer, self.offset,
+                                                   self.imageSize)  # TODO: foliage prevents offset from changing - fix
 
             if settings.physics:
                 self.offset = renderWithOffset(self.win, self.physicsHandler.evaluate(self.pBuffer), self.offset,
@@ -411,8 +421,9 @@ class Scene:
             if settings.character and not settings.characterAffectedByLight:
                 self.character.render(self.win)
 
+            if settings.camera: self.win.g0 = self.cam.render(self.win)
             out = pg.transform.scale(self.win.g0, (math.floor(self.win.g0.get_size()[0] * settings.scaleFactor),
-                                                    settings.size[1]))
+                                                   settings.size[1]))
 
             if settings.showFps:
                 if self.tick > 0:
@@ -425,7 +436,8 @@ class Scene:
 
 class MainScreenSceneLayout:
 
-    def __init__(self, bgImage):
+    def __init__(self, bgImage, cam: camera.Camera):
+        self.cam = cam
         self.image = bgImage
         self.lights = light.LightHandler([light.pointLight(settings.center, colors.lightColors.cold, 1, 0)])
 
@@ -436,6 +448,7 @@ class MainScreenScene:
 
     def __init__(self, layout: MainScreenSceneLayout, enabled=True):
         self.image = layout.image
+        self.cam = layout.cam
 
         self.lightHandler: light.LightHandler = layout.lights
         self.canvasSize = layout.canvasSize
@@ -446,7 +459,8 @@ class MainScreenScene:
         self.tick = 0
         self.pressed = False
 
-        self.startButtonRect = pg.Rect((round(settings.center[0]/2)-20, round(settings.center[1]/2)-10), (40, 20))
+        self.startButtonRect = pg.Rect((round(settings.center[0] / 2) - 20, round(settings.center[1] / 2) - 10),
+                                       (40, 20))
         self.startButtonFont = pg.font.SysFont("Arial", 18)
         self.startButtonText = self.startButtonFont.render("Start", False, (0, 0, 0))
 
@@ -459,11 +473,11 @@ class MainScreenScene:
         self.__enabled = True
 
     @property
-    def enabled(self): return self.__enabled
+    def enabled(self):
+        return self.__enabled
 
     def update(self, ticks, keys):
         if self.__enabled:
-
             self.lightHandler.lightsToList()
 
             mx = round(pg.mouse.get_pos()[0] / settings.scaleFactor)
@@ -473,31 +487,34 @@ class MainScreenScene:
             self.lightHandler.lights[0].x = mx
             self.lightHandler.lights[0].y = my
 
-            collide = self.startButtonRect.collidepoint(mx, my)
-
-            if collide:
-
-                if pg.mouse.get_pressed(3)[0]:
-                    self.lightHandler.lights[0].color = (255, 114, 128)  # RED: switch scenes
-                    self.disable()
-
-                self.lightHandler.lights[0].color = (176, 184, 220)  # BLUE: hovering
-            else:
-                self.lightHandler.lights[0].color = colors.lightColors.cold  # reset color
-
     def render(self):
         if self.__enabled:
             self.win.reset()
 
+            mx = round(pg.mouse.get_pos()[0] / settings.scaleFactor)
+            my = round(pg.mouse.get_pos()[1] / settings.scaleFactor)
+            collide = self.startButtonRect.collidepoint(mx, my)
+
+            c = (255, 255, 255)
+
+            if collide:
+
+                if pg.mouse.get_pressed(3)[0]:  # switch scenes
+                    self.disable()
+
+                c = (176, 184, 220)  # BLUE: hovering
+
             self.win.blit(self.image.gBuffer, (0, 0))
-            pg.draw.rect(self.win.g0, (255, 255, 255), self.startButtonRect)
-            self.win.g0.blit(self.startButtonText, (self.startButtonRect.topleft[0]+1, self.startButtonRect.topleft[1]))
+            pg.draw.rect(self.win.g0, c, self.startButtonRect)
+            self.win.g0.blit(self.startButtonText,
+                             (self.startButtonRect.topleft[0] + 1, self.startButtonRect.topleft[1] - 1))
 
             if settings.light:
                 self.win.blit(self.lightHandler.evaluate(self.win), (0, 0))
 
-            out = pg.transform.scale(self.win.g0, (math.floor(self.win.g0.get_size()[0] * settings.scaleFactor),
-                                                    settings.size[1]))
+            if settings.camera: self.win.g0 = self.cam.render(self.win)
+            out = pg.transform.scale(self.win.g0, (math.floor(settings.unscaledSize[0] * settings.scaleFactor),
+                                                   settings.size[1]))
 
             if settings.showFps:
                 if self.tick > 0:
