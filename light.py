@@ -164,6 +164,7 @@ class LightHandler:
         assert isinstance(self.shaderInLights, np.ndarray)
         assert len(self.shaderInLights) > 0
         shaderInG0, shaderInG1 = win.prepareForShader()
+        self.lightsToList()
 
         out = self.shaderHandler.fragment(self.shaderInLights, shaderInG0, shaderInG1)
 
@@ -178,7 +179,7 @@ class LightHandler:
         for l in self.lights:
             if isinstance(l, pointLight):
                 self.shaderInLights.append(
-                    [l.pos[0], l.pos[1], l.intensity, l.volume, l.color[0], l.color[1], l.color[2], l.spread]
+                    [l.pos[0], l.pos[1], l.intensity, l.volume, l.color[0], l.color[1], l.color[2], l.spread, 0]
                 )
 
         self.shaderInLights = np.array(self.shaderInLights, dtype=settings.dtype)

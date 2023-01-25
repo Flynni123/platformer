@@ -4,6 +4,7 @@ import numpy as np
 from numba import cuda
 
 import settings
+import maths
 
 
 @cuda.jit(device=True, fastmath=True)
@@ -98,33 +99,46 @@ def _fragment(g0, comp, attr):
     if -1 < tx < g0.shape[0] and -1 < ty < g0.shape[1]:
         exposure = attr[0]
         blur = attr[1]
+        scaleExposure = attr[2]
 
         setPixel(comp, tx, ty, (0, 0, 0))
         origin = getRGB(g0, tx, ty)
 
         # BLUR
-        if blur == 1:
+        if blur > 0:
 
             bOutR = 0
             bOutG = 0
             bOutB = 0
-            for x in [-1, 0, 1]:
-                for y in [-1, 0, 1]:
+            for x in range(-blur, blur+1):
+                for y in range(-blur, blur+1):
                     c = getRGB(g0, tx + x, ty + y)
                     bOutR += c[0]
                     bOutG += c[1]
                     bOutB += c[2]
 
-            origin = (bOutR / 9,
-                      bOutG / 9,
-                      bOutB / 9)
+            area = ((blur * 2) + 1) ** 2
+            origin = (bOutR / area,
+                      bOutG / area,
+                      bOutB / area)
 
         # EXPOSURE
         if exposure != 1:
-
             origin = (origin[0] * exposure,
                       origin[1] * exposure,
                       origin[2] * exposure)
+
+        # SCALE EXPOSURE
+        if scaleExposure >= 0:
+            cScaleExposure = maths.getRGB(scaleExposure)
+
+            origin = (origin[0] / cScaleExposure[0],
+                      origin[1] / cScaleExposure[1],
+                      origin[2] / cScaleExposure[2])
+
+            origin = (origin[0] * 255,
+                      origin[1] * 255,
+                      origin[2] * 255)
 
         setPixel(comp, tx, ty, origin)
 

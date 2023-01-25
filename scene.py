@@ -72,7 +72,7 @@ class Image:
 def loadImage(path, parallaxFac=1.0):
     p = os.path.abspath(path)
 
-    image = pg.image.load(p).convert()
+    image = pg.image.load(p)
     g1 = f"{os.path.split(p)[0]}\\{os.path.split(p)[1].split('.')[0]}g1.png"
     if os.path.exists(g1):
         normal = pg.image.load(g1)
@@ -186,12 +186,14 @@ class Character:
         self.floor = None
 
         self.jumping = False
+        self.falling = False
         self.inAir = True
 
         self.flipped = False
         self.current = self.animations.standing
         self.movementStart = 0
-        self.oldOffset = 0
+        self.oldOffset = -1
+        self.walk = True
 
     def update(self, ticks, keys, floor: pg.mask.Mask, offset):
         # TODO: pBuffer
@@ -203,23 +205,61 @@ class Character:
             oldY = self.pos[1]
             y = 0
 
-            while self.floor.get_at((round(self.pos[0] - offset + self.size[0] / 2), round(y + self.size[0]))) == 0:
+            while self.floor.get_at((round(self.pos[0] - offset + self.size[0] / 2), round(y + self.size[0]) - 1)) == 0:
                 y += 1
 
-                if y > settings.unscaledSize[1]:
-                    # raise FallingError(f"y: {y} > maxY: {settings.unscaledSize[1]}")
-                    y = 0
+                if y == settings.unscaledSize[1]:
                     break
 
+            y -= 1
+
             floorY = y
-            y = oldY - (self.velocity.y * ticks * settings.gravity)
+            y = (oldY - (self.velocity.y * ticks * settings.gravity))
             self.velocity.y -= settings.gravity * ticks
 
-            if y < floorY:
-                self.pos[1] = y
-            else:
-                self.pos[1] = floorY
+            if y >= floorY:
+                y = floorY
                 self.velocity.y = 0
+
+            if self.velocity.x > 0:
+                self.flipped = False
+            elif self.velocity.x < 0:
+                self.flipped = True
+
+            match self.flipped:
+                case True:
+
+                    yL = 0
+                    while self.floor.get_at(
+                            (round(self.pos[0] - (offset + 1) + self.size[0] / 2), round(yL + self.size[0]) - 1)) == 0:
+                        yL += 1
+                        if yL == settings.unscaledSize[1]:
+                            break
+
+                    yL -= 1
+
+                    if y - yL > settings.maxStepSizeY:
+                        self.walk = False
+                    else:
+                        self.walk = True
+
+                case False:
+
+                    yR = 0
+                    while self.floor.get_at(
+                            (round(self.pos[0] - (offset - 1) + self.size[0] / 2), round(yR + self.size[0]) - 1)) == 0:
+                        yR += 1
+                        if yR == settings.unscaledSize[1]:
+                            break
+
+                    yR -= 1
+
+                    if y - yR > settings.maxStepSizeY:
+                        self.walk = False
+                    else:
+                        self.walk = True
+
+            self.pos[1] = y
 
             if not y == floorY:
                 self.inAir = True
@@ -230,21 +270,33 @@ class Character:
             self.movementStart += ticks
 
             if keys[keyboardSettings.run] == 1:
+
                 self.velocity.x = -(settings.speed * settings.runFac * ticks * 100)
                 self.current = self.animations.running
+                if self.walk:
+                    offset += settings.speed * settings.runFac * ticks * 100
             else:
+
                 self.velocity.x = -(settings.speed * ticks * 100)
                 self.current = self.animations.walking
+                if self.walk:
+                    offset += settings.speed * ticks * 100
 
         elif keys[keyboardSettings.right] == 1:
             self.movementStart += ticks
 
             if keys[keyboardSettings.run] == 1:
+
                 self.velocity.x = settings.speed * settings.runFac * ticks * 100
                 self.current = self.animations.running
+                if self.walk:
+                    offset -= settings.speed * settings.runFac * ticks * 100
             else:
+
                 self.velocity.x = settings.speed * ticks * 100
                 self.current = self.animations.walking
+                if self.walk:
+                    offset -= settings.speed * ticks * 100
 
         else:
             self.velocity.x = 0
@@ -257,6 +309,8 @@ class Character:
                 self.velocity.y += settings.jumpHeight / settings.gravity
         else:
             self.jumping = False
+
+        return offset
 
     def render(self, win: light.GBuffer):
         gb = self.current.getImage().gBuffer
@@ -280,7 +334,7 @@ class Character:
         mask = pg.mask.from_surface(self.current.getImage().gBuffer.g0, 1)
         pBuffer.blit(physics.PBuffer(
             p=mask.to_surface(setcolor=(128 + self.velocity.x, 128 + self.velocity.y, 0), unsetcolor=(128, 128, 0))),
-                     self.pos)
+            self.pos)
 
 
 class Foliage:
@@ -313,15 +367,17 @@ def renderWithOffset(win: light.GBuffer, src: Union[Image, light.GBuffer], offse
     sizeX = size[0] / src.parallaxFac
     sx = size[0]
 
-    if offset < -sx + settings.unscaledSize[0]:
-        offset = -sx + settings.unscaledSize[0]
+    limit = -sx + settings.unscaledSize[0]
+    if offset < limit:
+        offset = limit
     elif offset > 0:
         offset = 0
 
     gBuffer = src if isinstance(src, light.GBuffer) else src.gBuffer
 
-    win.blit(gBuffer, (round(offset * src.parallaxFac), y))
-    win.blit(gBuffer, (round(offset * src.parallaxFac) + round(sizeX / src.parallaxFac), y))
+    offsetX = round(offset * src.parallaxFac)
+    win.blit(gBuffer, (offsetX, y))
+    win.blit(gBuffer, (offsetX + round(sizeX / src.parallaxFac), y))
 
     return offset
 
@@ -329,14 +385,16 @@ def renderWithOffset(win: light.GBuffer, src: Union[Image, light.GBuffer], offse
 # scene
 class SceneLayout:
 
-    def __init__(self, Images, Lights: light.LightHandler, Physics: physics.PhysicsHandler, cam: camera.Camera, foliage: list,
-                 floor: Image):
+    def __init__(self, Images, Lights: light.LightHandler, Physics: physics.PhysicsHandler, cam: camera.Camera,
+                 foliage: list,
+                 floor: Image, nextSceneOffset: int):
         self.images = Images
         self.lights = Lights
         self.physic = Physics
         self.cam = cam
         self.foliage = foliage
-        self.floor = pg.mask.from_surface(floor.gBuffer.g0, 1)
+        self.floor = pg.mask.from_surface(floor.gBuffer.g0, 128)
+        self.nextSceneRect = nextSceneOffset
 
         self.canvasSize = settings.unscaledSize
 
@@ -350,6 +408,7 @@ class Scene:
         self.physicsHandler: physics.PhysicsHandler = layout.physic
         self.floor = layout.floor
         self.foliage = layout.foliage
+        self.nextSceneRect = layout.nextSceneRect
 
         self.lightHandler: light.LightHandler = layout.lights
         self.canvasSize = layout.canvasSize
@@ -360,6 +419,8 @@ class Scene:
         self.pBuffer = physics.PBuffer(self.canvasSize)
         self.font = pg.font.SysFont("Arial", 14)
         self.tick = 0
+
+        self.lastStep = 0
 
         self.__enabled = enabled
 
@@ -375,23 +436,10 @@ class Scene:
 
     def update(self, ticks, keys):
         if self.__enabled:
-
             self.tick = ticks
 
-            if settings.character: self.character.update(ticks, keys, self.floor, self.offset)
+            if settings.character: self.offset = self.character.update(ticks, keys, self.floor, self.offset)
             if settings.physics: self.physicsHandler.update(ticks, self.pBuffer)
-
-            if keys[keyboardSettings.left] == 1:
-                if keys[keyboardSettings.run] == 1:
-                    self.offset += settings.speed * settings.runFac * ticks * 100
-                else:
-                    self.offset += settings.speed * ticks * 100
-
-            elif keys[keyboardSettings.right] == 1:
-                if keys[keyboardSettings.run] == 1:
-                    self.offset -= settings.speed * settings.runFac * ticks * 100
-                else:
-                    self.offset -= settings.speed * ticks * 100
 
     def render(self):
         if self.__enabled:
@@ -414,6 +462,8 @@ class Scene:
 
             if settings.character:
                 self.character.render(self.win)
+                if self.offset < -self.nextSceneRect:
+                    self.disable()
 
             if settings.light:
                 self.win.blit(self.lightHandler.evaluate(self.win), (0, 0))
@@ -427,7 +477,7 @@ class Scene:
 
             if settings.showFps:
                 if self.tick > 0:
-                    out.blit(self.font.render(f"{int(1 / self.tick)}", False, (255, 255, 255)), (0, 0))
+                    out.blit(self.font.render(f"{int(1 / self.tick)}", False, (255, 255 if self.character.walk else 0, 255)), (0, 0))
 
             return out
         else:
@@ -454,6 +504,9 @@ class MainScreenScene:
         self.canvasSize = layout.canvasSize
         self.imageSize = self.image.image.get_size()
 
+        self.mx = round(pg.mouse.get_pos()[0] / settings.scaleFactor)
+        self.my = round(pg.mouse.get_pos()[1] / settings.scaleFactor)
+
         self.win: light.GBuffer = light.GBuffer(settings.unscaledSize)
         self.font = pg.font.SysFont("Arial", 14)
         self.tick = 0
@@ -478,22 +531,20 @@ class MainScreenScene:
 
     def update(self, ticks, keys):
         if self.__enabled:
-            self.lightHandler.lightsToList()
-
-            mx = round(pg.mouse.get_pos()[0] / settings.scaleFactor)
-            my = round(pg.mouse.get_pos()[1] / settings.scaleFactor)
+            self.mx = round(pg.mouse.get_pos()[0] / settings.scaleFactor)
+            self.my = round(pg.mouse.get_pos()[1] / settings.scaleFactor)
 
             self.tick = ticks
-            self.lightHandler.lights[0].x = mx
-            self.lightHandler.lights[0].y = my
+            self.lightHandler.lights[0].x = self.mx
+            self.lightHandler.lights[0].y = self.my
+
+            self.lightHandler.lightsToList()
 
     def render(self):
         if self.__enabled:
             self.win.reset()
 
-            mx = round(pg.mouse.get_pos()[0] / settings.scaleFactor)
-            my = round(pg.mouse.get_pos()[1] / settings.scaleFactor)
-            collide = self.startButtonRect.collidepoint(mx, my)
+            collide = self.startButtonRect.collidepoint(self.mx, self.my)
 
             c = (255, 255, 255)
 
