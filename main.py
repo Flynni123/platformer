@@ -66,13 +66,14 @@ class Display:
                     scene.loadImage("assets/images/scene1/bg0.png", 1)
                     ],
                     light.LightHandler([
-                        light.pointLight((10, 10), colors.lightColors.cold, 1, .1, 1.2)
+                        light.pointLight((10, 10), colors.lightColors.cold, 1, .05, 1.2)
                     ]),
                     physics.PhysicsHandler([]),
                     cam,
                     foliage=[],
                     floor=scene.loadImage("assets/images/scene1/bg1.png", 1),
-                    nextSceneOffset=780
+                    nextSceneOffset=780,
+                    _id=0
                 ),
                 character=character
             ),
@@ -85,14 +86,14 @@ class Display:
                     scene.loadImage("assets/images/scene2/bg0.png", 1)
                     ],
                     light.LightHandler([
-                        light.pointLight((30, 50), colors.lightColors.cold, 1, .1, 1.2),
-                        light.pointLight((162, 50), colors.lightColors.cold, 1, .1, 1.2)
+                        light.pointLight(xy, colors.lightColors.cold, .3, .05, 1) for xy in [(30, 50), (162, 50)]
                     ]),
                     physics.PhysicsHandler([]),
                     cam,
                     foliage=[],
                     floor=scene.loadImage("assets/images/scene2/floor.png"),
-                    nextSceneOffset=1000
+                    nextSceneOffset=1000,
+                    _id=1
                 ),
                 character=character
             )
@@ -111,16 +112,18 @@ class Display:
                     cam,
                     foliage=[],
                     floor=scene.loadImage("assets/images/testScene/bg.png"),
-                    nextSceneOffset=1000
+                    nextSceneOffset=1000,
+                    _id=0
                 ),
                 character=character
             )
         ]
 
         self.counter = 0
-        self.current = self.scenes[self.counter]
+        self.currentList = self.scenes
+        self.current = self.currentList[self.counter]
 
-        for e, s in enumerate(self.scenes):
+        for e, s in enumerate(self.currentList):
             if isinstance(s, scene.Scene) or isinstance(s, scene.MainScreenScene):
                 if e == 0:
                     s.enable()
@@ -149,16 +152,9 @@ class Display:
 
             if not self.current.enabled:
                 self.counter += 1
-                self.current = self.scenes[self.counter]
+                self.current = self.currentList[self.counter]
                 self.current.enable()
                 self.current.update(ticks, pg.key.get_pressed())
-
-            #if self.counter == 1:
-            #    self.counter = 2
-            #    self.current.disable()
-            #    self.current = self.scenes[self.counter]
-            #    self.current.enable()
-            #    self.current.update(ticks, pg.key.get_pressed())
 
             for event in pg.event.get():
 

@@ -11,15 +11,6 @@ def avg(list_):
     return math.fsum(list_) / len(list_)
 
 
-@vectorize(['float32(float32, float32)',
-            'float64(float64, float64)',
-            'int32(int32, int32)',
-            'int64(int64, int64)'],
-            target='cuda')
-def sum_reduce(a, b):
-    return a + b
-
-
 @numba.jit(nopython=True)
 def getRGB(f):
     r = math.floor(f / 0x010000)

@@ -49,6 +49,7 @@ def multPixel(surf, x, y, rgb):
     g /= 255
     b /= 255
 
+    x, y = int(x), int(y)
     r2, g2, b2 = getRGB(surf, x, y)
     r2 /= 255
     g2 /= 255
@@ -71,7 +72,6 @@ def multPixel(surf, x, y, rgb):
     b *= 255
 
     r, g, b = math.floor(r), math.floor(g), math.floor(b)
-
     x, y = int(x), int(y)
     surf[x, y] = 0x010000 * r + \
                  0x000100 * g + \
@@ -157,40 +157,16 @@ def _fragment(lights, g0, g1, comp, lightMap):
                          math.pow((1 - (distance(scalePos(vec), scalePos(lightVec)) / l[7])), 2) * \
                          scalar  # final intensity (intensity * falloff * normalFalloff)
 
-            dx, dy = lightDir
-            dst = distance(lightVec, vec)
-
-            step = (dx / dst / stepFactor, dy / dst / stepFactor)
-
-            x, y = tx, ty
-            running = 0
+            c = fIntensity * 255 / len(lights)
+            addPixel(lightMap, tx, ty, (c, c, c))
+            addPixel(comp, tx, ty, (l[4] * fIntensity * (g0r / 255),
+                                    l[5] * fIntensity * (g0g / 255),
+                                    l[6] * fIntensity * (g0b / 255)))
 
             if g0[tx, ty] == 0:
-
-                fIntensity *= l[3]
-
-                for point in range(round(dst * stepFactor)):
-                    posX, posY = round(x), round(y)
-
-                    if g0[posX, posY] > 0:
-                        if getRGB(g1, posX, posY)[2] != 254:
-                            running += settings.wallFalloff
-
-                    x += step[0]
-                    y += step[1]
-
-            if running == 0:
-                c = (fIntensity * 255) / len(lights)
-                addPixel(lightMap, tx, ty, (c, c, c))
-                addPixel(comp, tx, ty, (l[4] * fIntensity,
-                                        l[5] * fIntensity,
-                                        l[6] * fIntensity))
-
-        i = getRGB(comp, tx, ty)
-        if g0[tx, ty] > 0:
-            setPixel(comp, tx, ty, ((i[0] / 255) * g0r,
-                                    (i[1] / 255) * g0g,
-                                    (i[2] / 255) * g0b))
+                addPixel(comp, tx, ty, (l[4] * l[3] * fIntensity,
+                                        l[5] * l[3] * fIntensity,
+                                        l[6] * l[3] * fIntensity))
 
     cuda.syncthreads()
 

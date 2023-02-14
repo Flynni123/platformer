@@ -2,9 +2,11 @@ import numpy as np
 
 speed = 1
 runFac = 1.5
-gravity = 9.81
-jumpHeight = 30
+gravity = 9.81 * 1.5
+jumpHeight = 30 * 1.5
 maxStepSizeY = 2
+
+disabledScenes = []
 
 size = (1920, 1080)
 unscaledSize = (192, 108)

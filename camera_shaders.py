@@ -45,6 +45,7 @@ def addPixel(surf, x, y, rgb):
 
 @cuda.jit(device=True, fastmath=True)
 def getRGB(surf, x, y):
+    x, y = int(x), int(y)
     f = surf[x][y]
     r = math.floor(f / 0x010000)
     f -= r * 0x010000
@@ -101,7 +102,7 @@ def _fragment(g0, comp, attr):
         blur = attr[1]
         scaleExposure = attr[2]
 
-        setPixel(comp, tx, ty, (0, 0, 0))
+        comp[tx, ty] = 0
         origin = getRGB(g0, tx, ty)
 
         # BLUR

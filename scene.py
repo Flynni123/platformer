@@ -387,7 +387,8 @@ class SceneLayout:
 
     def __init__(self, Images, Lights: light.LightHandler, Physics: physics.PhysicsHandler, cam: camera.Camera,
                  foliage: list,
-                 floor: Image, nextSceneOffset: int):
+                 floor: Image, nextSceneOffset: int,
+                 _id: int):
         self.images = Images
         self.lights = Lights
         self.physic = Physics
@@ -395,6 +396,7 @@ class SceneLayout:
         self.foliage = foliage
         self.floor = pg.mask.from_surface(floor.gBuffer.g0, 128)
         self.nextSceneRect = nextSceneOffset
+        self.id = _id
 
         self.canvasSize = settings.unscaledSize
 
@@ -409,6 +411,7 @@ class Scene:
         self.floor = layout.floor
         self.foliage = layout.foliage
         self.nextSceneRect = layout.nextSceneRect
+        self.id = layout.id
 
         self.lightHandler: light.LightHandler = layout.lights
         self.canvasSize = layout.canvasSize
@@ -436,10 +439,14 @@ class Scene:
 
     def update(self, ticks, keys):
         if self.__enabled:
-            self.tick = ticks
+            if self.id in settings.disabledScenes:
+                self.disable()
 
-            if settings.character: self.offset = self.character.update(ticks, keys, self.floor, self.offset)
-            if settings.physics: self.physicsHandler.update(ticks, self.pBuffer)
+            else:
+                self.tick = ticks
+
+                if settings.character: self.offset = self.character.update(ticks, keys, self.floor, self.offset)
+                if settings.physics: self.physicsHandler.update(ticks, self.pBuffer)
 
     def render(self):
         if self.__enabled:

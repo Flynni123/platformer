@@ -30,7 +30,7 @@ class Camera:
     def blur(self): return self._blur
 
     @blur.setter
-    def blur(self, new): self.blur = new
+    def blur(self, new): self._blur = new
 
     @property
     def exposure(self): return self._exposure

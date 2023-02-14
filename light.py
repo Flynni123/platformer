@@ -160,7 +160,7 @@ class LightHandler:
                     (round(l.color[0] * l.intensity), round(l.color[1] * l.intensity), round(l.color[2] * l.intensity)))
                 self.globalLights.blit(lS, (0, 0), special_flags=pg.BLEND_RGBA_ADD)
 
-    def evaluate(self, win: GBuffer):
+    def evaluate(self, win: GBuffer, lightMapAsG1=False):
         assert isinstance(self.shaderInLights, np.ndarray)
         assert len(self.shaderInLights) > 0
         shaderInG0, shaderInG1 = win.prepareForShader()
@@ -171,7 +171,10 @@ class LightHandler:
         pg.pixelcopy.array_to_surface(self.composite, out.round(0).astype(np.uint32))
         self.composite.blit(self.globalLights, (0, 0), special_flags=pg.BLEND_RGB_ADD)
 
-        return GBuffer(self.composite.get_size(), self.composite)
+        if lightMapAsG1:
+            return GBuffer(self.composite.get_size(), self.composite, pg.pixelcopy.make_surface(self.shaderHandler.lightMap.round(0).astype(np.uint32)))
+        else:
+            return GBuffer(self.composite.get_size(), self.composite)
 
     def lightsToList(self):
         del self.shaderInLights
