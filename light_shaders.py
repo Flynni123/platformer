@@ -72,7 +72,6 @@ def multPixel(surf, x, y, rgb):
     b *= 255
 
     r, g, b = math.floor(r), math.floor(g), math.floor(b)
-    x, y = int(x), int(y)
     surf[x, y] = 0x010000 * r + \
                  0x000100 * g + \
                  0x000001 * b
