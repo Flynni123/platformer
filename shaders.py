@@ -4,6 +4,7 @@ import numpy as np
 from numba import cuda
 
 import settings
+import maths
 
 
 @cuda.jit(device=True, fastmath=True)
@@ -126,19 +127,19 @@ def clamp(top, bottom, x):
 
 
 @cuda.jit(fastmath=True)
-def _fragment(lights, g0, g1, comp, lightMap):
+def _fragment(lights, lightMap, g0, g1, comp, attr):
     ty: int = cuda.threadIdx.x
     tx: int = cuda.blockIdx.x
 
-    stepFactor = settings.raytracingSteps
-
-    if -1 < tx < g0.shape[0] and -1 < ty < g0.shape[1]:
+    if 0 <= tx < g0.shape[0] and 0 <= ty < g0.shape[1]:
 
         comp[tx, ty] = 0
         lightMap[tx, ty] = 0
 
         g0r, g0g, g0b = getRGB(g0, tx, ty)
         g1r, g1g, g1b = getRGB(g1, tx, ty)
+
+        # --- LIGHT ---
 
         normalVec = (g1r - 128, g1g - 128)
         vec = (tx, ty)
@@ -156,8 +157,6 @@ def _fragment(lights, g0, g1, comp, lightMap):
                          math.pow((1 - (distance(scalePos(vec), scalePos(lightVec)) / l[7])), 2) * \
                          scalar  # final intensity (intensity * falloff * normalFalloff)
 
-            c = fIntensity * 255 / len(lights)
-            addPixel(lightMap, tx, ty, (c, c, c))
             addPixel(comp, tx, ty, (l[4] * fIntensity * (g0r / 255),
                                     l[5] * fIntensity * (g0g / 255),
                                     l[6] * fIntensity * (g0b / 255)))
@@ -167,7 +166,58 @@ def _fragment(lights, g0, g1, comp, lightMap):
                                         l[5] * l[3] * fIntensity,
                                         l[6] * l[3] * fIntensity))
 
-    cuda.syncthreads()
+        cuda.syncthreads()
+
+        # --- CAMERA ---
+
+        exposure = attr[0]
+        blur = attr[1]
+        scaleExposure = attr[2]
+
+        origin = getRGB(comp, tx, ty)
+
+        # BLUR
+        if blur > 0:
+
+            bOutR = 0
+            bOutG = 0
+            bOutB = 0
+            for x in range(-blur, blur+1):
+                for y in range(-blur, blur+1):
+                    c = getRGB(g0, tx + x, ty + y)
+                    bOutR += c[0]
+                    bOutG += c[1]
+                    bOutB += c[2]
+
+            area = ((blur * 2) + 1) ** 2
+            origin = (bOutR / area,
+                      bOutG / area,
+                      bOutB / area)
+
+        # EXPOSURE
+        if exposure != 1:
+            origin = (origin[0] * exposure,
+                      origin[1] * exposure,
+                      origin[2] * exposure)
+
+        # SCALE EXPOSURE
+        if scaleExposure >= 0:
+            cScaleExposure = maths.getRGB(scaleExposure)
+
+            origin = (origin[0] / cScaleExposure[0],
+                      origin[1] / cScaleExposure[1],
+                      origin[2] / cScaleExposure[2])
+
+            origin = (origin[0] * 255,
+                      origin[1] * 255,
+                      origin[2] * 255)
+
+        cuda.syncthreads()
+        setPixel(comp, tx, ty, origin)
+
+    else:
+        cuda.syncthreads()
+        cuda.syncthreads()
 
 
 class shaderHandler:
@@ -181,13 +231,31 @@ class shaderHandler:
     """
 
     def __init__(self, size):
-        self.run = False
         self.size = size
         self.comp = np.zeros(size, dtype=settings.dtype)
         self.lightMap = np.zeros(size, dtype=settings.dtype)
 
-    def fragment(self, l: np.ndarray, g0: np.ndarray, g1: np.ndarray):
-        with cuda.defer_cleanup():
-            _fragment[1024, 512](l, g0, g1, self.comp, self.lightMap)
+        self.l = np.array([], dtype=settings.dtype)
+        self.g0 = np.array([], dtype=settings.dtype)
+        self.g1 = np.array([], dtype=settings.dtype)
+        self.attr = np.array([], dtype=settings.dtype)
 
-        return self.comp
+    def setAttributes(self, g0=None, g1=None, l=None, attr=None):
+        if g0 is not None:
+            self.g0 = g0
+
+        if g1 is not None:
+            self.g1 = g1
+
+        if l is not None:
+            self.l = l
+
+        if attr is not None:
+            self.attr = attr
+
+    def fragment(self):
+        with cuda.defer_cleanup():
+            _fragment[1024, 512](self.l, self.lightMap, self.g0, self.g1, self.comp, self.attr)
+
+    def getResult(self):
+        return self.comp.round(0).astype(np.int32)

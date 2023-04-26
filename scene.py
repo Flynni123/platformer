@@ -13,6 +13,7 @@ import light
 import maths
 import physics
 import settings
+import shaders
 
 
 class TimerError(Exception):
@@ -226,45 +227,34 @@ class Character:
             elif self.velocity.x < 0:
                 self.flipped = True
 
-            match self.flipped:
-                case True:
+            if self.flipped:
+                # check left (-2)
 
-                    yL = 0
-                    while self.floor.get_at(
-                            (round(self.pos[0] - (offset + 1) + self.size[0] / 2), round(yL + self.size[0]) - 1)) == 0:
-                        yL += 1
-                        if yL == settings.unscaledSize[1]:
-                            break
+                yL = 0
+                while self.floor.get_at(
+                        (round(self.pos[0] - (offset + 1) + self.size[0] / 2), round(yL + self.size[0]) - 1)) == 0:
+                    yL += 1
+                    if yL == settings.unscaledSize[1]:
+                        break
 
-                    yL -= 1
+                yL -= 1
+                self.walk = not (y - yL > settings.maxStepSizeY)
 
-                    if y - yL > settings.maxStepSizeY:
-                        self.walk = False
-                    else:
-                        self.walk = True
+            else:
+                # check right (+2)
 
-                case False:
+                yR = 0
+                while self.floor.get_at(
+                        (round(self.pos[0] - (offset - 1) + self.size[0] / 2), round(yR + self.size[0]) - 1)) == 0:
+                    yR += 1
+                    if yR == settings.unscaledSize[1]:
+                        break
 
-                    yR = 0
-                    while self.floor.get_at(
-                            (round(self.pos[0] - (offset - 1) + self.size[0] / 2), round(yR + self.size[0]) - 1)) == 0:
-                        yR += 1
-                        if yR == settings.unscaledSize[1]:
-                            break
-
-                    yR -= 1
-
-                    if y - yR > settings.maxStepSizeY:
-                        self.walk = False
-                    else:
-                        self.walk = True
+                yR -= 1
+                self.walk = not (y - yR > settings.maxStepSizeY)
 
             self.pos[1] = y
-
-            if not y == floorY:
-                self.inAir = True
-            else:
-                self.inAir = False
+            self.inAir = not (y == floorY)
 
         if keys[keyboardSettings.left] == 1:
             self.movementStart += ticks
@@ -404,28 +394,30 @@ class SceneLayout:
 class Scene:
 
     def __init__(self, layout: SceneLayout, character: Character, enabled=False):
-        self.character: Character = character
-        self.images: list = layout.images
-        self.cam = layout.cam
-        self.physicsHandler: physics.PhysicsHandler = layout.physic
-        self.floor = layout.floor
-        self.foliage = layout.foliage
-        self.nextSceneRect = layout.nextSceneRect
         self.id = layout.id
 
+        self.character: Character = character
+        self.images: list = layout.images
+        self.floor = layout.floor
+        self.foliage = layout.foliage
+
+        self.physicsHandler: physics.PhysicsHandler = layout.physic
         self.lightHandler: light.LightHandler = layout.lights
+        self.cam = layout.cam
+
         self.canvasSize = layout.canvasSize
         self.imageSize = self.images[0].image.get_size()
+        self.nextSceneRect = layout.nextSceneRect
 
+        self.tick = 0
+        self.lastStep = 0
         self.offset = 0
+        self.__enabled = enabled
+
         self.win: light.GBuffer = light.GBuffer(self.canvasSize)
         self.pBuffer = physics.PBuffer(self.canvasSize)
+
         self.font = pg.font.SysFont("Arial", 14)
-        self.tick = 0
-
-        self.lastStep = 0
-
-        self.__enabled = enabled
 
     def disable(self):
         self.__enabled = False
@@ -471,14 +463,23 @@ class Scene:
                 self.character.render(self.win)
                 if self.offset < -self.nextSceneRect:
                     self.disable()
+                    return pg.Surface((0, 0))
 
             if settings.light:
-                self.win.blit(self.lightHandler.evaluate(self.win), (0, 0))
+                self.lightHandler.preEvaluate(self.win)
+
+            if settings.camera:
+                self.cam.preRender()
+
+            if any([settings.light, settings.camera]):
+                self.lightHandler.shaderHandler.fragment()
+
+            if settings.light:
+                self.win.blit(self.lightHandler.evaluate(), (0, 0))
 
             if settings.character and not settings.characterAffectedByLight:
                 self.character.render(self.win)
 
-            if settings.camera: self.win.g0 = self.cam.render(self.win)
             out = pg.transform.scale(self.win.g0, (math.floor(self.win.g0.get_size()[0] * settings.scaleFactor),
                                                    settings.size[1]))
 
@@ -493,10 +494,10 @@ class Scene:
 
 class MainScreenSceneLayout:
 
-    def __init__(self, bgImage, cam: camera.Camera):
+    def __init__(self, shaderHandler: shaders.shaderHandler, bgImage, cam: camera.Camera):
         self.cam = cam
         self.image = bgImage
-        self.lights = light.LightHandler([light.pointLight(settings.center, colors.lightColors.cold, 1, 0)])
+        self.lights = light.LightHandler(shaderHandler, [light.pointLight(settings.center, colors.lightColors.cold, 1, 0)])
 
         self.canvasSize = settings.unscaledSize
 
@@ -505,9 +506,10 @@ class MainScreenScene:
 
     def __init__(self, layout: MainScreenSceneLayout, enabled=True):
         self.image = layout.image
-        self.cam = layout.cam
 
+        self.cam = layout.cam
         self.lightHandler: light.LightHandler = layout.lights
+
         self.canvasSize = layout.canvasSize
         self.imageSize = self.image.image.get_size()
 
@@ -568,11 +570,20 @@ class MainScreenScene:
                              (self.startButtonRect.topleft[0] + 1, self.startButtonRect.topleft[1] - 1))
 
             if settings.light:
-                self.win.blit(self.lightHandler.evaluate(self.win), (0, 0))
+                self.lightHandler.preEvaluate(self.win)
 
-            if settings.camera: self.win.g0 = self.cam.render(self.win)
-            out = pg.transform.scale(self.win.g0, (math.floor(settings.unscaledSize[0] * settings.scaleFactor),
-                                                   settings.size[1]))
+            if settings.camera:
+                self.cam.preRender()
+
+            if any([settings.light, settings.camera]):
+                self.lightHandler.shaderHandler.fragment()
+
+            if settings.light:
+                self.win.blit(self.lightHandler.evaluate(), (0, 0))
+
+            if settings.camera: self.win.g0 = self.cam.render()
+            out = pg.transform.scale(self.win.g0, (math.floor(self.win.g0.get_size()[0] * settings.scaleFactor),
+                                                   math.floor(self.win.g0.get_size()[1] * settings.scaleFactor)))
 
             if settings.showFps:
                 if self.tick > 0:

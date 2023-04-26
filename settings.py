@@ -11,7 +11,6 @@ disabledScenes = []
 size = (1920, 1080)
 unscaledSize = (192, 108)
 center = (round(unscaledSize[0]), round(unscaledSize[1]))
-
 fullscreen = True
 
 assert size[0] / unscaledSize[0] == size[1] / unscaledSize[1]
@@ -30,7 +29,7 @@ foliage = False
 
 light = True
 globalLights = True
-showLightIntensityMap = True
+showLightIntensityMap = False
 raytracingSteps = 3
 wallFalloff = .01 / raytracingSteps
 

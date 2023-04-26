@@ -4,7 +4,7 @@ import numpy as np
 import pygame as pg
 
 import colors
-import light_shaders as shaders
+import shaders
 import settings
 
 
@@ -138,14 +138,14 @@ class GBuffer:
 
 
 class LightHandler:
-    def __init__(self, lights: List[Light]):
+    def __init__(self, shaderHandler: shaders.shaderHandler, lights: List[Light]):
         """
 
         :param lights: list of lights in the scene
         """
         self.lights = lights
 
-        self.shaderHandler = shaders.shaderHandler(settings.unscaledSize)
+        self.shaderHandler = shaderHandler
 
         self.composite = pg.Surface(settings.unscaledSize)
         self.globalLights = pg.Surface(settings.unscaledSize)
@@ -160,21 +160,19 @@ class LightHandler:
                     (round(l.color[0] * l.intensity), round(l.color[1] * l.intensity), round(l.color[2] * l.intensity)))
                 self.globalLights.blit(lS, (0, 0), special_flags=pg.BLEND_RGBA_ADD)
 
-    def evaluate(self, win: GBuffer, lightMapAsG1=False):
+    def preEvaluate(self, win: GBuffer):
         assert isinstance(self.shaderInLights, np.ndarray)
         assert len(self.shaderInLights) > 0
         shaderInG0, shaderInG1 = win.prepareForShader()
         self.lightsToList()
 
-        out = self.shaderHandler.fragment(self.shaderInLights, shaderInG0, shaderInG1)
+        self.shaderHandler.setAttributes(shaderInG0, shaderInG1, self.shaderInLights)
 
-        pg.pixelcopy.array_to_surface(self.composite, out.round(0).astype(np.uint32))
+    def evaluate(self):
+        pg.pixelcopy.array_to_surface(self.composite, self.shaderHandler.getResult())
         self.composite.blit(self.globalLights, (0, 0), special_flags=pg.BLEND_RGB_ADD)
 
-        if lightMapAsG1:
-            return GBuffer(self.composite.get_size(), self.composite, pg.pixelcopy.make_surface(self.shaderHandler.lightMap.round(0).astype(np.uint32)))
-        else:
-            return GBuffer(self.composite.get_size(), self.composite)
+        return GBuffer(self.composite.get_size(), self.composite)
 
     def lightsToList(self):
         del self.shaderInLights

@@ -2,26 +2,28 @@ import pygame as pg
 import numpy as np
 
 import light
-import camera_shaders
+import shaders
 import settings
 
 
 class Camera:
 
-    def __init__(self, exposure=1, blur=0, scaleExposure=False):
+    def __init__(self, shaderHandler: shaders.shaderHandler, exposure=1, blur=0, scaleExposure=False):
         self._exposure = exposure
         self._blur = blur
         self._scaleExp = scaleExposure
 
-        self.shaderHandler = camera_shaders.shaderHandler(settings.unscaledSize)
+        self.shaderHandler = shaderHandler
         self.out = pg.Surface(settings.unscaledSize)
 
-    def render(self, surf: light.GBuffer):
+    def preRender(self):
 
-        imageIn = np.array(pg.surfarray.array2d(surf.g0), dtype=settings.dtype)
-        attributesIn = np.array([self.exposure, self.blur, np.max(imageIn) if self.scaleExposure else -1], dtype=settings.dtype)
+        attributesIn = np.array([self.exposure, self.blur, np.max(self.shaderHandler.g0) if self.scaleExposure else -1], dtype=settings.dtype)
 
-        out: np.ndarray = self.shaderHandler.fragment(imageIn, attributesIn)
+        self.shaderHandler.setAttributes(attr=attributesIn)
+
+    def render(self):
+        out: np.ndarray = self.shaderHandler.getResult()
         pg.pixelcopy.array_to_surface(self.out, out.round(0).astype(np.uint32))
 
         return self.out

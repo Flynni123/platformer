@@ -6,8 +6,8 @@ from pygame import gfxdraw
 
 import light
 import maths
-import physics_shaders as shaders
 import settings
+import shaders
 
 
 class Node:
@@ -88,7 +88,7 @@ class PBuffer:
 
 class PhysicsHandler:
 
-    def __init__(self, Lines: list):
+    def __init__(self, shaderHandler: shaders.shaderHandler, Lines: list):
         self.lines = Lines
         self.size = settings.unscaledSize
 
@@ -97,7 +97,7 @@ class PhysicsHandler:
         self.t = 0
         self.time = 0
 
-        self.shaderHandler = shaders.shaderHandler(self.size)
+        self.shaderHandler = shaderHandler
 
     def update(self, ticks, pBuffer: PBuffer):
         self.t = ticks
@@ -108,7 +108,7 @@ class PhysicsHandler:
 
         self.composite = light.GBuffer(self.size)
 
-        shaderInLines = []
+        """shaderInLines = []
         for l in self.lines:
             if isinstance(l, Line):
                 shaderInLines.append(
@@ -134,6 +134,6 @@ class PhysicsHandler:
 
             for p in range(len(pairs) - 1):
                 gfxdraw.line(self.composite.g0, pairs[p][0], pairs[p][1], pairs[p + 1][0], pairs[p + 1][1], color)
-                gfxdraw.line(self.composite.g1, pairs[p][0], pairs[p][1], pairs[p + 1][0], pairs[p + 1][1], (normal[0], normal[1], 254*round(noShadow)))
+                gfxdraw.line(self.composite.g1, pairs[p][0], pairs[p][1], pairs[p + 1][0], pairs[p + 1][1], (normal[0], normal[1], 254*round(noShadow)))"""
 
         return self.composite

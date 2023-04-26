@@ -1,4 +1,8 @@
+import sys
+
 import pygame as pg
+
+import shaders
 
 pg.init()
 
@@ -12,7 +16,7 @@ import settings
 
 """
 Instead of rendering everything as efficiently as possible it feel's like I'm rendering everything twice.
-Oh, and memory management is a hell.
+Oh, and memory management is hell.
 - Tzu Sun, art of not knowing what i'm coding
 """
 
@@ -37,15 +41,11 @@ class Display:
 
         self.clock = pg.time.Clock()
 
-        self.fpsList = []
-        self.timeList = []
+        self.display = pg.display.set_mode(self.size, pg.FULLSCREEN) if fullscreen else pg.display.set_mode(self.size)
 
-        if fullscreen:
-            self.display = pg.display.set_mode(size, pg.FULLSCREEN)
-        else:
-            self.display = pg.display.set_mode(size)
+        shaderHandler = shaders.shaderHandler(settings.unscaledSize)
+        cam = camera.Camera(shaderHandler)
 
-        cam = camera.Camera()
         character = scene.Character(
             scene.AnimationHandler({
                 "walking": scene.Animation(scene.loadImage("assets/images/character_walking.png"), .2),
@@ -56,7 +56,7 @@ class Display:
         )
         self.scenes = [
             # MAIN SCREEN SCENE
-            scene.MainScreenScene(scene.MainScreenSceneLayout(scene.loadImage("assets/images/MainScreen/bg.png"), cam)),
+            scene.MainScreenScene(scene.MainScreenSceneLayout(shaderHandler, scene.loadImage("assets/images/MainScreen/bg.png"), cam)),
 
             # FIRST SCENE
             scene.Scene(
@@ -65,10 +65,12 @@ class Display:
                     scene.loadImage("assets/images/scene1/bg1.png", 1),
                     scene.loadImage("assets/images/scene1/bg0.png", 1)
                     ],
-                    light.LightHandler([
+                    light.LightHandler(shaderHandler, [
                         light.pointLight((10, 10), colors.lightColors.cold, 1, .05, 1.2)
                     ]),
-                    physics.PhysicsHandler([]),
+                    physics.PhysicsHandler(shaderHandler, [
+
+                    ]),
                     cam,
                     foliage=[],
                     floor=scene.loadImage("assets/images/scene1/bg1.png", 1),
@@ -81,14 +83,16 @@ class Display:
             # SECOND SCENE
             scene.Scene(
                 scene.SceneLayout([
-                    scene.loadImage("assets/images/scene2/bg2.png", 0.33),
-                    scene.loadImage("assets/images/scene2/bg1.png", 0.66),
-                    scene.loadImage("assets/images/scene2/bg0.png", 1)
+                    scene.loadImage("assets/images/scene2/bg2.png", 1/3),
+                    scene.loadImage("assets/images/scene2/bg1.png", 2/3),
+                    scene.loadImage("assets/images/scene2/bg0.png", 3/3)
                     ],
-                    light.LightHandler([
+                    light.LightHandler(shaderHandler, [
                         light.pointLight(xy, colors.lightColors.cold, .3, .05, 1) for xy in [(30, 50), (162, 50)]
                     ]),
-                    physics.PhysicsHandler([]),
+                    physics.PhysicsHandler(shaderHandler, [
+
+                    ]),
                     cam,
                     foliage=[],
                     floor=scene.loadImage("assets/images/scene2/floor.png"),
@@ -104,11 +108,12 @@ class Display:
                 scene.SceneLayout([
                     scene.loadImage("assets/images/testScene/bg.png")
                 ],
-                    light.LightHandler([
-                        light.pointLight((30, 50), colors.lightColors.cold, 1, .1, 1.2),
-                        light.pointLight((162, 50), colors.lightColors.cold, 1, .1, 1.2)
+                    light.LightHandler(shaderHandler, [
+                        light.pointLight(xy, colors.lightColors.cold, 1, .1, 1.2) for xy in [(30, 50), (162, 50)]
                     ]),
-                    physics.PhysicsHandler([]),
+                    physics.PhysicsHandler(shaderHandler, [
+
+                    ]),
                     cam,
                     foliage=[],
                     floor=scene.loadImage("assets/images/testScene/bg.png"),
@@ -120,7 +125,7 @@ class Display:
         ]
 
         self.counter = 0
-        self.currentList = self.scenes
+        self.currentList = self.testScenes
         self.current = self.currentList[self.counter]
 
         for e, s in enumerate(self.currentList):
@@ -132,16 +137,12 @@ class Display:
 
         pg.mouse.set_visible(False)
 
-        self.run = False
-        firstRun = True
-
         self.run = True
-        while self.run:
 
-            if firstRun:
-                firstRun = False
-                self.timeHandler.start()
-                self.display.fill(colors.black)
+        self.timeHandler.start()
+        self.display.fill(colors.black)
+
+        while self.run:
 
             if settings.debug:
                 self.current.lightHandler.lights[0].x = pg.mouse.get_pos()[0] / settings.scaleFactor
@@ -157,13 +158,10 @@ class Display:
                 self.current.update(ticks, pg.key.get_pressed())
 
             for event in pg.event.get():
-
                 if event.type == pg.QUIT:
-
                     self.run = False
 
                 elif event.type == pg.KEYDOWN:
-
                     if event.key == pg.K_ESCAPE:
                         self.run = False
 
@@ -174,6 +172,7 @@ class Display:
         print(round(self.clock.get_fps(), 1))
         pg.mouse.set_visible(True)
         pg.quit()
+        sys.exit()
 
 
 d = Display()
