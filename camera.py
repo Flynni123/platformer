@@ -8,17 +8,16 @@ import settings
 
 class Camera:
 
-    def __init__(self, shaderHandler: shaders.shaderHandler, exposure=1, blur=0, scaleExposure=False):
+    def __init__(self, shaderHandler: shaders.shaderHandler, exposure=1, blur=0):
         self._exposure = exposure
         self._blur = blur
-        self._scaleExp = scaleExposure
 
         self.shaderHandler = shaderHandler
         self.out = pg.Surface(settings.unscaledSize)
 
     def preRender(self):
 
-        attributesIn = np.array([self.exposure, self.blur, np.max(self.shaderHandler.g0) if self.scaleExposure else -1], dtype=settings.dtype)
+        attributesIn = np.array([self.exposure, self.blur], dtype=settings.dtype)
 
         self.shaderHandler.setAttributes(attr=attributesIn)
 

@@ -53,6 +53,14 @@ def fromPolar(r, roh):
     return r * math.sin(degRoh), - (r * math.cos(degRoh))
 
 
+@numba.jit(nopython=True)
+def angelTo(pos1, pos2):
+    a_ = pos2[0] - pos1[0]
+    b_ = pos2[1] - pos1[1]
+
+    return math.degrees(math.atan2(a_, b_))
+
+
 class Vec2:
     def __init__(self, xy, a=0.0):
         self.x, self.y = xy

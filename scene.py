@@ -196,6 +196,11 @@ class Character:
         self.oldOffset = -1
         self.walk = True
 
+        self.cPosR = (0, 0)
+        self.cPosRTOP = (0, 0)
+        self.cPosL = (0, 0)
+        self.cPosLTOP = (0, 0)
+
     def update(self, ticks, keys, floor: pg.mask.Mask, offset):
         # TODO: pBuffer
         self.animations.cTicks(ticks)
@@ -206,13 +211,8 @@ class Character:
             oldY = self.pos[1]
             y = 0
 
-            while self.floor.get_at((round(self.pos[0] - offset + self.size[0] / 2), round(y + self.size[0]) - 1)) == 0:
+            while self.floor.get_at((self.pos[0] - offset + round(self.size[0] / 2), y + self.size[0])) == 0:
                 y += 1
-
-                if y == settings.unscaledSize[1]:
-                    break
-
-            y -= 1
 
             floorY = y
             y = (oldY - (self.velocity.y * ticks * settings.gravity))
@@ -227,34 +227,24 @@ class Character:
             elif self.velocity.x < 0:
                 self.flipped = True
 
-            if self.flipped:
-                # check left (-2)
+            if not self.flipped:
+                # check right (+1)
 
-                yL = 0
-                while self.floor.get_at(
-                        (round(self.pos[0] - (offset + 1) + self.size[0] / 2), round(yL + self.size[0]) - 1)) == 0:
-                    yL += 1
-                    if yL == settings.unscaledSize[1]:
-                        break
+                self.cPosR = (round(self.pos[0] - (offset - 1) + (self.size[0] / 2)), round(y + self.size[0] - 1 - settings.maxStepSizeY))
+                self.cPosRTOP = (self.cPosR[0], self.cPosR[1] - self.size[1] + settings.maxStepSizeY)
 
-                yL -= 1
-                self.walk = not (y - yL > settings.maxStepSizeY)
+                self.walk = (True if self.floor.get_at(self.cPosR) == 0 else False) #or (True if self.floor.get_at(self.cPosRTOP) == 0 else False)
 
             else:
-                # check right (+2)
+                # check left (-1)
 
-                yR = 0
-                while self.floor.get_at(
-                        (round(self.pos[0] - (offset - 1) + self.size[0] / 2), round(yR + self.size[0]) - 1)) == 0:
-                    yR += 1
-                    if yR == settings.unscaledSize[1]:
-                        break
+                self.cPosL = (round(self.pos[0] - (offset + 1) + (self.size[0] / 2)), round(y + self.size[0] - 1 - settings.maxStepSizeY))
+                self.cPosLTOP = (self.cPosL[0], self.cPosL[1] - self.size[1] + settings.maxStepSizeY)
 
-                yR -= 1
-                self.walk = not (y - yR > settings.maxStepSizeY)
+                self.walk = (True if self.floor.get_at(self.cPosL) == 0 else False) #or (True if self.floor.get_at(self.cPosLTOP) == 0 else False)
 
             self.pos[1] = y
-            self.inAir = not (y == floorY)
+            self.inAir = y != floorY
 
         if keys[keyboardSettings.left] == 1:
             self.movementStart += ticks
@@ -485,7 +475,9 @@ class Scene:
 
             if settings.showFps:
                 if self.tick > 0:
-                    out.blit(self.font.render(f"{int(1 / self.tick)}", False, (255, 255 if self.character.walk else 0, 255)), (0, 0))
+                    out.blit(
+                        self.font.render(f"{int(1 / self.tick)}", False, (255, 255 if self.character.walk else 0, 255)),
+                        (0, 0))
 
             return out
         else:
@@ -497,7 +489,8 @@ class MainScreenSceneLayout:
     def __init__(self, shaderHandler: shaders.shaderHandler, bgImage, cam: camera.Camera):
         self.cam = cam
         self.image = bgImage
-        self.lights = light.LightHandler(shaderHandler, [light.pointLight(settings.center, colors.lightColors.cold, 1, 0)])
+        self.lights = light.LightHandler(shaderHandler,
+                                         [light.pointLight(settings.center, colors.lightColors.cold, 1, 0)])
 
         self.canvasSize = settings.unscaledSize
 
@@ -521,8 +514,7 @@ class MainScreenScene:
         self.tick = 0
         self.pressed = False
 
-        self.startButtonRect = pg.Rect((round(settings.center[0] / 2) - 20, round(settings.center[1] / 2) - 10),
-                                       (40, 20))
+        self.startButtonRect = pg.Rect((settings.center[0] - 20, settings.center[1] - 10), (40, 20))
         self.startButtonFont = pg.font.SysFont("Arial", 18)
         self.startButtonText = self.startButtonFont.render("Start", False, (0, 0, 0))
 

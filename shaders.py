@@ -127,14 +127,13 @@ def clamp(top, bottom, x):
 
 
 @cuda.jit(fastmath=True)
-def _fragment(lights, lightMap, g0, g1, comp, attr):
+def _fragment(lights, g0, g1, comp, attr):
     ty: int = cuda.threadIdx.x
     tx: int = cuda.blockIdx.x
 
     if 0 <= tx < g0.shape[0] and 0 <= ty < g0.shape[1]:
 
         comp[tx, ty] = 0
-        lightMap[tx, ty] = 0
 
         g0r, g0g, g0b = getRGB(g0, tx, ty)
         g1r, g1g, g1b = getRGB(g1, tx, ty)
@@ -146,33 +145,66 @@ def _fragment(lights, lightMap, g0, g1, comp, attr):
 
         for l in lights:
 
-            lightDir = (l[0] - tx, l[1] - ty)
-            lightVec = (l[0], l[1])
+            match round(l[0]):
 
-            scalar = clamp(1, 0, dot(lightDir, normalVec))
-            scalar = 1 if g1r + g1g == 0 else scalar
-            scalar = 1 if g1b == 255 else scalar
+                case 0:  # pointLight
 
-            fIntensity = l[2] * \
-                         math.pow((1 - (distance(scalePos(vec), scalePos(lightVec)) / l[7])), 2) * \
-                         scalar  # final intensity (intensity * falloff * normalFalloff)
+                    lightDir = (l[1] - tx, l[2] - ty)
+                    lightVec = (l[1], l[2])
 
-            addPixel(comp, tx, ty, (l[4] * fIntensity * (g0r / 255),
-                                    l[5] * fIntensity * (g0g / 255),
-                                    l[6] * fIntensity * (g0b / 255)))
+                    scalar = clamp(1, 0, dot(lightDir, normalVec))
+                    scalar = 1 if g1r + g1g == 0 else scalar
+                    scalar = 1 if g1b == 255 else scalar
 
-            if g0[tx, ty] == 0:
-                addPixel(comp, tx, ty, (l[4] * l[3] * fIntensity,
-                                        l[5] * l[3] * fIntensity,
-                                        l[6] * l[3] * fIntensity))
+                    fIntensity = l[3] * \
+                                 math.pow((1 - (distance(scalePos(vec), scalePos(lightVec)) / l[8])), 2) * \
+                                 scalar  # final intensity (intensity * falloff * normalFalloff)
 
-        cuda.syncthreads()
+                    addPixel(comp, tx, ty, (l[5] * fIntensity * (g0r / 255),
+                                            l[6] * fIntensity * (g0g / 255),
+                                            l[7] * fIntensity * (g0b / 255)))
+
+                    if g0[tx, ty] == 0:
+                        addPixel(comp, tx, ty, (l[5] * l[4] * fIntensity,
+                                                l[6] * l[4] * fIntensity,
+                                                l[7] * l[4] * fIntensity))
+
+                case 1:  # spotLight
+
+                    lightDir = (l[1] - tx, l[2] - ty)
+                    lightVec = (l[1], l[2])
+
+                    scalar = clamp(1, 0, dot(lightDir, normalVec))
+                    scalar = 1 if g1r + g1g == 0 else scalar
+                    scalar = 1 if g1b == 255 else scalar
+
+                    angelToLight = maths.angelTo(lightVec, vec)
+
+                    if l[9] - (l[10] / 2) < angelToLight < l[9] + (l[10] / 2):
+
+                        fIntensity = l[3] * \
+                                     math.pow((1 - (distance(scalePos(vec), scalePos(lightVec)) / l[8])), 2) * \
+                                     scalar  # final intensity (intensity * falloff * normalFalloff)
+
+                        addPixel(comp, tx, ty, (l[5] * fIntensity * (g0r / 255),
+                                                l[6] * fIntensity * (g0g / 255),
+                                                l[7] * fIntensity * (g0b / 255)))
+
+                        if g0[tx, ty] == 0:
+                            addPixel(comp, tx, ty, (l[5] * l[4] * fIntensity,
+                                                    l[6] * l[4] * fIntensity,
+                                                    l[7] * l[4] * fIntensity))
+
+                case 2:  # globalLight
+
+                    addPixel(comp, tx, ty, (l[5] * (g0r / 255) * l[3],
+                                            l[6] * (g0g / 255) * l[3],
+                                            l[7] * (g0b / 255) * l[3]))
 
         # --- CAMERA ---
 
         exposure = attr[0]
         blur = attr[1]
-        scaleExposure = attr[2]
 
         origin = getRGB(comp, tx, ty)
 
@@ -200,23 +232,10 @@ def _fragment(lights, lightMap, g0, g1, comp, attr):
                       origin[1] * exposure,
                       origin[2] * exposure)
 
-        # SCALE EXPOSURE
-        if scaleExposure >= 0:
-            cScaleExposure = maths.getRGB(scaleExposure)
-
-            origin = (origin[0] / cScaleExposure[0],
-                      origin[1] / cScaleExposure[1],
-                      origin[2] / cScaleExposure[2])
-
-            origin = (origin[0] * 255,
-                      origin[1] * 255,
-                      origin[2] * 255)
-
         cuda.syncthreads()
         setPixel(comp, tx, ty, origin)
 
     else:
-        cuda.syncthreads()
         cuda.syncthreads()
 
 
@@ -233,7 +252,6 @@ class shaderHandler:
     def __init__(self, size):
         self.size = size
         self.comp = np.zeros(size, dtype=settings.dtype)
-        self.lightMap = np.zeros(size, dtype=settings.dtype)
 
         self.l = np.array([], dtype=settings.dtype)
         self.g0 = np.array([], dtype=settings.dtype)
@@ -255,7 +273,7 @@ class shaderHandler:
 
     def fragment(self):
         with cuda.defer_cleanup():
-            _fragment[1024, 512](self.l, self.lightMap, self.g0, self.g1, self.comp, self.attr)
+            _fragment[1024, 512](self.l, self.g0, self.g1, self.comp, self.attr)
 
     def getResult(self):
         return self.comp.round(0).astype(np.int32)

@@ -10,7 +10,7 @@ import settings
 
 class Light:
 
-    def __init__(self, color=colors.lightColors.cold, intensity=100.0):
+    def __init__(self, color=colors.lightColors.cold, intensity=1.0):
         """
 
         :param color: obv
@@ -26,6 +26,34 @@ class pointLight(Light):
     def __init__(self, xy, color=colors.lightColors.cold, intensity=1.0, volume=0.3, spread=1.0, parallax=1.0):
         super().__init__(color, intensity)
         self.x, self.y = xy
+        self.__volume = volume
+        self.parallax = parallax
+        if 1 <= spread:
+            self.__spread = spread
+        else:
+            raise ValueError(f"\'spread\' needs to be > 1")
+
+    @property
+    def pos(self):
+        return self.x, self.y
+
+    @property
+    def volume(self):
+        return self.__volume
+
+    @property
+    def spread(self):
+        return self.__spread
+
+
+class spotLight(Light):
+
+    def __init__(self, xy, color=colors.lightColors.cold, intensity=1.0, angle=45.0, wideness=90.0, volume=0.3,
+                 spread=1.0, parallax=1.0):
+        super().__init__(color, intensity)
+        self.x, self.y = xy
+        self.angle = angle
+        self.wideness = wideness
         self.__volume = volume
         self.parallax = parallax
         if 1 <= spread:
@@ -162,7 +190,8 @@ class LightHandler:
 
     def preEvaluate(self, win: GBuffer):
         assert isinstance(self.shaderInLights, np.ndarray)
-        assert len(self.shaderInLights) > 0
+        assert len(self.shaderInLights) >= 1
+
         shaderInG0, shaderInG1 = win.prepareForShader()
         self.lightsToList()
 
@@ -180,7 +209,16 @@ class LightHandler:
         for l in self.lights:
             if isinstance(l, pointLight):
                 self.shaderInLights.append(
-                    [l.pos[0], l.pos[1], l.intensity, l.volume, l.color[0], l.color[1], l.color[2], l.spread, 0]
+                    [0, l.pos[0], l.pos[1], l.intensity, l.volume, l.color[0], l.color[1], l.color[2], l.spread, 0, 0]
+                )
+            elif isinstance(l, spotLight):
+                self.shaderInLights.append(
+                    [1, l.pos[0], l.pos[1], l.intensity, l.volume, l.color[0], l.color[1], l.color[2], l.spread,
+                     l.angle, l.wideness]
+                )
+            elif isinstance(l, globalLight):
+                self.shaderInLights.append(
+                    [2, 0, 0, l.intensity, 0, l.color[0], l.color[1], l.color[2], 0, 0, 0]
                 )
 
         self.shaderInLights = np.array(self.shaderInLights, dtype=settings.dtype)

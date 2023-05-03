@@ -109,7 +109,8 @@ class Display:
                     scene.loadImage("assets/images/testScene/bg.png")
                 ],
                     light.LightHandler(shaderHandler, [
-                        light.pointLight(xy, colors.lightColors.cold, 1, .1, 1.2) for xy in [(30, 50), (162, 50)]
+                        light.spotLight((10, 10), colors.lightColors.cold, 1, 50, 20, .5),
+                        light.globalLight(intensity=.2)
                     ]),
                     physics.PhysicsHandler(shaderHandler, [
 
