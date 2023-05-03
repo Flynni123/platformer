@@ -178,22 +178,25 @@ def _fragment(lights, g0, g1, comp, attr):
                     scalar = 1 if g1r + g1g == 0 else scalar
                     scalar = 1 if g1b == 255 else scalar
 
-                    angelToLight = maths.angelTo(lightVec, vec)
+                    angelToLight = round(maths.angelTo(lightVec, vec), 1)
+                    a = angelToLight - l[9]
+                    aIntensity = 1 if -(l[10] / 2) < a < (l[10] / 2) else 0
 
-                    if l[9] - (l[10] / 2) < angelToLight < l[9] + (l[10] / 2):
+                    if aIntensity == 0:
+                        if -(l[10] / 2) - 1 < a:
+                            aIntensity = clamp(1, 0, a - math.floor(a))
 
-                        fIntensity = l[3] * \
-                                     math.pow((1 - (distance(scalePos(vec), scalePos(lightVec)) / l[8])), 2) * \
-                                     scalar  # final intensity (intensity * falloff * normalFalloff)
+                    fIntensity = l[3] * \
+                                 math.pow((1 - (distance(scalePos(vec), scalePos(lightVec)) / l[8])), 2) * scalar * aIntensity
 
-                        addPixel(comp, tx, ty, (l[5] * fIntensity * (g0r / 255),
-                                                l[6] * fIntensity * (g0g / 255),
-                                                l[7] * fIntensity * (g0b / 255)))
+                    addPixel(comp, tx, ty, (l[5] * fIntensity * (g0r / 255),
+                                            l[6] * fIntensity * (g0g / 255),
+                                            l[7] * fIntensity * (g0b / 255)))
 
-                        if g0[tx, ty] == 0:
-                            addPixel(comp, tx, ty, (l[5] * l[4] * fIntensity,
-                                                    l[6] * l[4] * fIntensity,
-                                                    l[7] * l[4] * fIntensity))
+                    if g0[tx, ty] == 0:
+                        addPixel(comp, tx, ty, (l[5] * l[4] * fIntensity,
+                                                l[6] * l[4] * fIntensity,
+                                                l[7] * l[4] * fIntensity))
 
                 case 2:  # globalLight
 
