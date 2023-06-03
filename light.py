@@ -198,7 +198,7 @@ class LightHandler:
         self.shaderHandler.setAttributes(shaderInG0, shaderInG1, self.shaderInLights)
 
     def evaluate(self):
-        pg.pixelcopy.array_to_surface(self.composite, self.shaderHandler.getResult())
+        self.composite = self.shaderHandler.getResult()
         self.composite.blit(self.globalLights, (0, 0), special_flags=pg.BLEND_RGB_ADD)
 
         return GBuffer(self.composite.get_size(), self.composite)

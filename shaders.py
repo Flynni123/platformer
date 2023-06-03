@@ -1,6 +1,7 @@
 import math
 
 import numpy as np
+import pygame as pg
 from numba import cuda
 
 import settings
@@ -182,10 +183,6 @@ def _fragment(lights, g0, g1, comp, attr):
                     a = angelToLight - l[9]
                     aIntensity = 1 if -(l[10] / 2) < a < (l[10] / 2) else 0
 
-                    if aIntensity == 0:
-                        if -(l[10] / 2) - 1 < a:
-                            aIntensity = clamp(1, 0, a - math.floor(a))
-
                     fIntensity = l[3] * \
                                  math.pow((1 - (distance(scalePos(vec), scalePos(lightVec)) / l[8])), 2) * scalar * aIntensity
 
@@ -261,6 +258,8 @@ class shaderHandler:
         self.g1 = np.array([], dtype=settings.dtype)
         self.attr = np.array([], dtype=settings.dtype)
 
+        self.compPG = pg.Surface(size)
+
     def setAttributes(self, g0=None, g1=None, l=None, attr=None):
         if g0 is not None:
             self.g0 = g0
@@ -278,5 +277,10 @@ class shaderHandler:
         with cuda.defer_cleanup():
             _fragment[1024, 512](self.l, self.g0, self.g1, self.comp, self.attr)
 
+        out = np.require(self.comp, "<u4", "F").tobytes("F")
+
+        bProxy = self.compPG.get_buffer()
+        bProxy.write(out)
+
     def getResult(self):
-        return self.comp.round(0).astype(np.int32)
+        return self.compPG

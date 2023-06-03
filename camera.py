@@ -22,10 +22,7 @@ class Camera:
         self.shaderHandler.setAttributes(attr=attributesIn)
 
     def render(self):
-        out: np.ndarray = self.shaderHandler.getResult()
-        pg.pixelcopy.array_to_surface(self.out, out.round(0).astype(np.uint32))
-
-        return self.out
+        return self.shaderHandler.getResult()
 
     @property
     def blur(self): return self._blur
